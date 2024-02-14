@@ -2,6 +2,15 @@ package plc.project;
 
 import java.util.List;
 
+//do i need these imports?
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Stream;
+
 /**
  * The parser takes the sequence of tokens emitted by the lexer and turns that
  * into a structured representation of the program, called the Abstract Syntax
@@ -145,7 +154,8 @@ public final class Parser {
      * Parses the {@code expression} rule.
      */
     public Ast.Expression parseExpression() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        //throw new UnsupportedOperationException(); TODO: edit this function to parse all expressions
+        return parseMultiplicativeExpression();
     }
 
     /**
@@ -173,7 +183,32 @@ public final class Parser {
      * Parses the {@code multiplicative-expression} rule.
      */
     public Ast.Expression parseMultiplicativeExpression() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        //throw new UnsupportedOperationException(); TODO
+        //find first expression
+        StringBuilder lhs = new StringBuilder("");
+        if (peek(Token.Type.IDENTIFIER)) {
+            lhs.append(tokens.get(0).getLiteral());
+            match(Token.Type.IDENTIFIER);
+        }
+        //find operator
+        StringBuilder op = new StringBuilder("");
+        if (peek(Token.Type.OPERATOR)) {
+            op.append(tokens.get(0).getLiteral().toString());
+            match(Token.Type.OPERATOR);
+        }
+        //find last expression
+        StringBuilder rhs = new StringBuilder("");
+        if (peek(Token.Type.IDENTIFIER)) {
+            rhs.append(tokens.get(0).getLiteral());
+            match(Token.Type.IDENTIFIER);
+        }
+
+        //return new statement
+        return new Ast.Expression.Binary(op.toString(),
+                new Ast.Expression.Access(Optional.empty(), lhs.toString()),
+                new Ast.Expression.Access(Optional.empty(), rhs.toString())
+        );
+
     }
 
     /**
@@ -184,6 +219,7 @@ public final class Parser {
      */
     public Ast.Expression parsePrimaryExpression() throws ParseException {
         //throw new UnsupportedOperationException(); TODO
+        String temp = tokens.get(0).getLiteral();
         if (peek(Token.Type.IDENTIFIER)) {
             if (peek("NIL")) {
                 match("NIL");
@@ -197,25 +233,29 @@ public final class Parser {
                 match("FALSE");
                 return new Ast.Expression.Literal(Boolean.FALSE);
             }
+            else {
+                //normal identifier, TODO: check for recursive logical expressions
+                return new Ast.Expression.Access(Optional.empty(), temp);
+            }
         }
         else if (peek(Token.Type.INTEGER)) {
             match(Token.Type.INTEGER);
-            return new Ast.Expression.Literal(new java.math.BigInteger(tokens.get(0).getLiteral()));
+            return new Ast.Expression.Literal(new BigInteger(temp));
         }
         else if (peek(Token.Type.DECIMAL)) {
             match(Token.Type.DECIMAL);
-            return new Ast.Expression.Literal(new java.math.BigDecimal(tokens.get(0).getLiteral()));
+            return new Ast.Expression.Literal(new BigDecimal(temp));
         }
         else if (peek(Token.Type.CHARACTER)) {
             match(Token.Type.CHARACTER);
-            return new Ast.Expression.Literal(tokens.get(0).getLiteral().charAt(0));
+            //edit char
+            return new Ast.Expression.Literal(editChar(temp));
         }
         else if (peek(Token.Type.STRING)) {
             match(Token.Type.STRING);
-            return new Ast.Expression.Literal(tokens.get(0).getLiteral());
+            //edit the string
+            return new Ast.Expression.Literal(editString(temp));
         }
-        else
-            throw new ParseException("Testing", tokens.index);
         return new Ast.Expression.Literal(null);
 
     }
@@ -266,6 +306,104 @@ public final class Parser {
             }
         }
         return peek;
+    }
+
+    //helper functions i made
+
+    public char editChar(String temp) {
+        //weird bug where i remove quotes are char disappears for escape chars
+        if (temp.length() == 3) {
+            var check3 = temp.charAt(1);
+            return temp.charAt(1);
+        }
+        else {
+            //char is an escape
+            char check1 = temp.charAt(1);
+            char next = temp.charAt(2);
+            if (check1 != '\\') {
+                return 'x';
+            }
+            else {
+                //check if check2 is escape
+                if (next == 'b') {
+                    return '\b';
+                }
+                else if (next == 'n') {
+                    return '\n';
+                }
+                else if (next == 'r') {
+                    return '\r';
+                }
+                else if (next == 't') {
+                    return '\t';
+                }
+                else if (next == '\'') {
+                    return '\'';
+                }
+                else if (next == '\"') {
+                    return '\"';
+                }
+                else if (next == '\\') {
+                    return '\\';
+                }
+            }
+        }
+        return 'x';
+    }
+
+    public String editString(String temp) {
+        //remove quotes
+        String noQuotes = temp.substring(1, temp.length() - 1);
+        //convert literal escape sequences into real escapes
+        StringBuilder res = new StringBuilder("");
+        String escapes = "[bnrt'\"\\\\]";
+        for (int i = 0; i < noQuotes.length(); i++) {
+            char c = noQuotes.charAt(i);
+            //check for first forward slash
+            if (c == '\\') {
+                if (i == noQuotes.length() - 1) {
+                    //just forward slash, append and move on
+                    res.append(c);
+                }
+                else {
+                    //next char may match escape sequence
+                    char next = noQuotes.charAt(i + 1);
+                    if ((next + "").matches(escapes)) {
+                        //ONLY append escape
+                        if (next == 'b') {
+                            res.append('\b');
+                        }
+                        else if (next == 'n') {
+                            res.append('\n');
+                        }
+                        else if (next == 'r') {
+                            res.append('\r');
+                        }
+                        else if (next == 't') {
+                            res.append('\t');
+                        }
+                        else if (next == '\'') {
+                            res.append('\'');
+                        }
+                        else if (next == '\"') {
+                            res.append('\"');
+                        }
+                        else if (next == '\\') {
+                            res.append('\\');
+                        }
+                        i++;
+                    }
+                    else {
+                        //just forward slash
+                        res.append(c);
+                    }
+                }
+            }
+            else {
+                res.append(c);
+            }
+        }
+        return res.toString();
     }
 
     private static final class TokenStream {
