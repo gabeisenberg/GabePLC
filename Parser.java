@@ -94,6 +94,7 @@ public final class Parser {
      */
     public Ast.Statement parseStatement() throws ParseException {
         throw new UnsupportedOperationException(); //TODO
+        //return new Ast.Statement.Expression();
     }
 
     /**
@@ -154,17 +155,22 @@ public final class Parser {
      * Parses the {@code expression} rule.
      */
     public Ast.Expression parseExpression() throws ParseException {
-        //throw new UnsupportedOperationException(); TODO: edit this function to parse all expressions
-        //check operator of second token
-        String check = tokens.get(1).getLiteral();
-        if (check.matches("[*/^]"))
-            return parseMultiplicativeExpression();
-        else if (check.matches("[+-]"))
-            return parseAdditiveExpression();
-        else if (check.matches("[<>]|(==)|(!=)"))
-            return parseComparisonExpression();
-        else if (check.matches("(&&)|(||)"))
-            return parseLogicalExpression();
+        //check how many operations there are
+        if (tokens.has(1)) {
+            //check operator of second token
+            String check = tokens.get(1).getLiteral();
+            if (check.matches("[*/^]"))
+                return parseMultiplicativeExpression();
+            else if (check.matches("[+-]"))
+                return parseAdditiveExpression();
+            else if (check.matches("[<>]|(==)|(!=)"))
+                return parseComparisonExpression();
+            else if (check.matches("(&&)|(||)"))
+                return parseLogicalExpression();
+        }
+        else {
+            return parsePrimaryExpression();
+        }
         return null;
     }
 
