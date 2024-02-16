@@ -116,41 +116,11 @@ public final class Parser {
             match(";");
         }
         else {
-            throw new ParseException("Missing ;", tokens.index);
+            int size = tokens.get(-1).getIndex() + tokens.get(-1).getLiteral().length();
+            throw new ParseException("Missing ;", size);
+            //throw new ParseException("Missing ;", tokens.index);
         }
         return res;
-        /*Ast.Statement res = null;
-        if (peek(Token.Type.IDENTIFIER, "(")) {
-            //function
-            res = new Ast.Statement.Expression(parseExpression());
-            match("(");
-            if (peek(")")) {
-                match(")");
-            }
-            else {
-                throw new ParseException("Missing )", tokens.index);
-            }
-        }
-        else if (peek(Token.Type.IDENTIFIER, "=")) {
-            //assignment
-            Ast.Expression lhsExp = parseExpression();
-            if (peek("=")) {
-                match("=");
-            }
-            else {
-                throw new ParseException("Missing =", tokens.index);
-            }
-            Ast.Expression rhsExp = parseExpression();
-            res = new Ast.Statement.Assignment(lhsExp, rhsExp);
-        }
-        //MUST match ;
-        if (peek(";")) {
-            match(";");
-        }
-        else {
-            throw new ParseException("Missing ;", tokens.index);
-        }
-        return res;*/
     }
 
     /**
@@ -259,7 +229,7 @@ public final class Parser {
         //get first multtplicative exp
         Ast.Expression lhs = parseMultiplicativeExpression();
         //match logical operator
-        if ((!peek("+") || peek("-"))) {
+        if (!(peek("+") || peek("-"))) {
             //check next operation
             return lhs;
             //throw new ParseException("Missing multiplicative operator", tokens.index);
@@ -297,6 +267,11 @@ public final class Parser {
      * not strictly necessary.
      */
     public Ast.Expression parsePrimaryExpression() throws ParseException {
+        if (!tokens.has(0)) {
+            //no operand to get
+            int size = tokens.get(-1).getIndex() + tokens.get(-1).getLiteral().length();
+            throw new ParseException("Missing Operand", size);
+        }
         String temp = tokens.get(0).getLiteral();
         if (peek(Token.Type.IDENTIFIER)) {
             if (peek("NIL")) {
@@ -326,10 +301,21 @@ public final class Parser {
                         //check for separating comma
                         if (peek(",")) {
                             match(",");
+                            if (peek(")")) {
+                                int size = tokens.get(-1).getIndex();
+                                throw new ParseException("Trailing ,", size);
+                            }
                         }
+                        /*else if (!peek(")")) {
+                            int size = tokens.get(-1).getIndex() + tokens.get(-1).getLiteral().length();
+                            throw new ParseException("Missing ,", size);
+                            //throw new ParseException("Missing ,", tokens.get(0).getIndex() + tokens.get(0).getLiteral().length());
+                        }*/
                     }
                     if (!peek(")")) {
-                        throw new ParseException("Missing )", tokens.index);
+                        int size = tokens.get(-1).getIndex() + tokens.get(-1).getLiteral().length();
+                        throw new ParseException("Missing )", size);
+                        //throw new ParseException("Missing )", tokens.index);
                     }
                     match(")");
                     return new Ast.Expression.Function(temp, parameters);
@@ -343,7 +329,9 @@ public final class Parser {
                         match("[");
                     }
                     else {
-                        throw new ParseException("Missing ]", tokens.index);
+                        int size = tokens.get(-1).getIndex() + tokens.get(-1).getLiteral().length();
+                        throw new ParseException("Missing ]", size);
+                        //throw new ParseException("Missing ]", tokens.get(0).getIndex() + tokens.get(0).getLiteral().length());
                     }
                     return new Ast.Expression.Access(Optional.of(new Ast.Expression.Access(Optional.empty(), nextName)), temp);
                 }
@@ -380,10 +368,13 @@ public final class Parser {
                 return new Ast.Expression.Group(inside);
             }
             else {
-                throw new ParseException("Missing )", tokens.index);
+                // (func
+                int size = tokens.get(-1).getIndex() + tokens.get(-1).getLiteral().length();
+                throw new ParseException("Missing )", size);
             }
         }
-        return new Ast.Expression.Literal(null);
+        int size = tokens.get(0).getIndex();
+        throw new ParseException("Invalid Expression", size);
 
     }
 
