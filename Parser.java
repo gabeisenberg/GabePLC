@@ -1,13 +1,11 @@
 package plc.project;
 
-import java.util.List;
+import java.util.*;
 
 //do i need these imports?
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -93,8 +91,66 @@ public final class Parser {
      * statement, then it is an expression/assignment statement.
      */
     public Ast.Statement parseStatement() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
-        //return new Ast.Statement.Expression();
+        Ast.Statement res = null;
+        //check for assignment
+        //check for first expression
+        String lhs = tokens.get(0).getLiteral();
+        Ast.Expression exp1 = parseExpression();
+        //check for =
+        if (peek("=")) {
+            match("=");
+            //get next name of rhs var
+            String rhs = tokens.get(0).getLiteral();
+            Ast.Expression exp2 = parseExpression();
+            res = new Ast.Statement.Assignment(
+                    new Ast.Expression.Access(Optional.empty(), lhs),
+                    new Ast.Expression.Access(Optional.empty(), rhs)
+            );
+        }
+        else {
+            //not assignment
+            res = new Ast.Statement.Expression(exp1);
+        }
+        //MUST match ;
+        if (peek(";")) {
+            match(";");
+        }
+        else {
+            throw new ParseException("Missing ;", tokens.index);
+        }
+        return res;
+        /*Ast.Statement res = null;
+        if (peek(Token.Type.IDENTIFIER, "(")) {
+            //function
+            res = new Ast.Statement.Expression(parseExpression());
+            match("(");
+            if (peek(")")) {
+                match(")");
+            }
+            else {
+                throw new ParseException("Missing )", tokens.index);
+            }
+        }
+        else if (peek(Token.Type.IDENTIFIER, "=")) {
+            //assignment
+            Ast.Expression lhsExp = parseExpression();
+            if (peek("=")) {
+                match("=");
+            }
+            else {
+                throw new ParseException("Missing =", tokens.index);
+            }
+            Ast.Expression rhsExp = parseExpression();
+            res = new Ast.Statement.Assignment(lhsExp, rhsExp);
+        }
+        //MUST match ;
+        if (peek(";")) {
+            match(";");
+        }
+        else {
+            throw new ParseException("Missing ;", tokens.index);
+        }
+        return res;*/
     }
 
     /**
@@ -155,146 +211,83 @@ public final class Parser {
      * Parses the {@code expression} rule.
      */
     public Ast.Expression parseExpression() throws ParseException {
-        //check how many operations there are
-        if (tokens.has(1)) {
-            //check operator of second token
-            String check = tokens.get(1).getLiteral();
-            if (check.matches("[*/^]"))
-                return parseMultiplicativeExpression();
-            else if (check.matches("[+-]"))
-                return parseAdditiveExpression();
-            else if (check.matches("[<>]|(==)|(!=)"))
-                return parseComparisonExpression();
-            else if (check.matches("(&&)|(||)"))
-                return parseLogicalExpression();
-        }
-        else {
-            return parsePrimaryExpression();
-        }
-        return null;
+        return parseLogicalExpression();
     }
 
     /**
      * Parses the {@code logical-expression} rule.
      */
     public Ast.Expression parseLogicalExpression() throws ParseException {
-        //throw new UnsupportedOperationException(); TODO
-        StringBuilder lhs = new StringBuilder("");
-        Ast.Expression prim1 = null;
-        Ast.Expression prim2 = null;
-        if (peek(Token.Type.IDENTIFIER)) {
-            lhs.append(tokens.get(0).getLiteral());
-            prim1 = parsePrimaryExpression();
+        //get first comp exp
+        Ast.Expression lhs = parseComparisonExpression();
+        //match logical operator
+        if ((!(peek("&&") || peek("||")))) {
+            //check next operation
+            return lhs;
+            //throw new ParseException("Missing logical operator", tokens.index);
         }
-        //find operator
-        StringBuilder op = new StringBuilder("");
-        if (peek(Token.Type.OPERATOR)) {
-            if (peek("&&") || peek("||")) {
-                op.append(tokens.get(0).getLiteral().toString());
-                match(Token.Type.OPERATOR);
-            }
-        }
-        //find last expression
-        StringBuilder rhs = new StringBuilder("");
-        if (peek(Token.Type.IDENTIFIER)) {
-            rhs.append(tokens.get(0).getLiteral());
-            prim2 = parsePrimaryExpression();
-        }
-
-        //return new statement
-        return new Ast.Expression.Binary(op.toString(), prim1, prim2);
+        String op = tokens.get(0).getLiteral();
+        match(Token.Type.OPERATOR);
+        //get second comp exp
+        Ast.Expression rhs = parseComparisonExpression();
+        return new Ast.Expression.Binary(op, lhs, rhs);
     }
 
     /**
      * Parses the {@code comparison-expression} rule.
      */
     public Ast.Expression parseComparisonExpression() throws ParseException {
-        //throw new UnsupportedOperationException(); TODO
-        StringBuilder lhs = new StringBuilder("");
-        Ast.Expression prim1 = null;
-        Ast.Expression prim2 = null;
-        if (peek(Token.Type.IDENTIFIER)) {
-            lhs.append(tokens.get(0).getLiteral());
-            prim1 = parsePrimaryExpression();
+        //get first add exp
+        Ast.Expression lhs = parseAdditiveExpression();
+        //match logical operator
+        if (!(peek("<") || peek(">") || peek("==") || peek("!="))) {
+            //check next operation
+            return lhs;
+            //throw new ParseException("Missing comparison operator", tokens.index);
         }
-        //find operator
-        StringBuilder op = new StringBuilder("");
-        if (peek(Token.Type.OPERATOR)) {
-            if (peek("<") || peek(">") || peek("==") || peek("!=")) {
-                op.append(tokens.get(0).getLiteral().toString());
-                match(Token.Type.OPERATOR);
-            }
-        }
-        //find last expression
-        StringBuilder rhs = new StringBuilder("");
-        if (peek(Token.Type.IDENTIFIER)) {
-            rhs.append(tokens.get(0).getLiteral());
-            prim2 = parsePrimaryExpression();
-        }
-
-        //return new statement
-        return new Ast.Expression.Binary(op.toString(), prim1, prim2);
+        String op = tokens.get(0).getLiteral();
+        match(Token.Type.OPERATOR);
+        //get second add exp
+        Ast.Expression rhs = parseAdditiveExpression();
+        return new Ast.Expression.Binary(op, lhs, rhs);
     }
 
     /**
      * Parses the {@code additive-expression} rule.
      */
     public Ast.Expression parseAdditiveExpression() throws ParseException {
-        StringBuilder lhs = new StringBuilder("");
-        Ast.Expression prim1 = null;
-        Ast.Expression prim2 = null;
-        if (peek(Token.Type.IDENTIFIER)) {
-            lhs.append(tokens.get(0).getLiteral());
-            prim1 = parsePrimaryExpression();
+        //get first multtplicative exp
+        Ast.Expression lhs = parseMultiplicativeExpression();
+        //match logical operator
+        if ((!peek("+") || peek("-"))) {
+            //check next operation
+            return lhs;
+            //throw new ParseException("Missing multiplicative operator", tokens.index);
         }
-        //find operator
-        StringBuilder op = new StringBuilder("");
-        if (peek(Token.Type.OPERATOR)) {
-            if (peek("+") || peek("-")) {
-                op.append(tokens.get(0).getLiteral().toString());
-                match(Token.Type.OPERATOR);
-            }
-        }
-        //find last expression
-        StringBuilder rhs = new StringBuilder("");
-        if (peek(Token.Type.IDENTIFIER)) {
-            rhs.append(tokens.get(0).getLiteral());
-            prim2 = parsePrimaryExpression();
-        }
-
-        //return new statement
-        return new Ast.Expression.Binary(op.toString(), prim1, prim2);
+        String op = tokens.get(0).getLiteral();
+        match(Token.Type.OPERATOR);
+        //get second multiplicative exp
+        Ast.Expression rhs = parseMultiplicativeExpression();
+        return new Ast.Expression.Binary(op, lhs, rhs);
     }
 
     /**
      * Parses the {@code multiplicative-expression} rule.
      */
     public Ast.Expression parseMultiplicativeExpression() throws ParseException {
-        //find first expression
-        StringBuilder lhs = new StringBuilder("");
-        Ast.Expression prim1 = null;
-        Ast.Expression prim2 = null;
-        if (peek(Token.Type.IDENTIFIER)) {
-            lhs.append(tokens.get(0).getLiteral());
-            prim1 = parsePrimaryExpression();
+        //get first multtplicative exp
+        Ast.Expression lhs = parsePrimaryExpression();
+        //match logical operator
+        if (!(peek("*") || peek("/") || peek("^"))) {
+            //check next operation
+            return lhs;
+            //throw new ParseException("Missing mu operator", tokens.index);
         }
-        //find operator
-        StringBuilder op = new StringBuilder("");
-        if (peek(Token.Type.OPERATOR)) {
-            if (peek("*") || peek("/") || peek("^")) {
-                op.append(tokens.get(0).getLiteral().toString());
-                match(Token.Type.OPERATOR);
-            }
-        }
-        //find last expression
-        StringBuilder rhs = new StringBuilder("");
-        if (peek(Token.Type.IDENTIFIER)) {
-            rhs.append(tokens.get(0).getLiteral());
-            prim2 = parsePrimaryExpression();
-        }
-
-        //return new statement
-        return new Ast.Expression.Binary(op.toString(), prim1, prim2);
+        String op = tokens.get(0).getLiteral();
+        match(Token.Type.OPERATOR);
+        //get second multiplicative exp
+        Ast.Expression rhs = parsePrimaryExpression();
+        return new Ast.Expression.Binary(op, lhs, rhs);
     }
 
     /**
@@ -319,9 +312,45 @@ public final class Parser {
                 return new Ast.Expression.Literal(Boolean.FALSE);
             }
             else {
-                //normal identifier, TODO: check for recursive logical expressions
+                //get identifier
                 match(Token.Type.IDENTIFIER);
-                return new Ast.Expression.Access(Optional.empty(), temp);
+                //Ast.Expression id = parsePrimaryExpression();
+                //check for list or function
+                if (peek("(")) {
+                    match("(");
+                    //function, create list of parameters
+                    ArrayList<Ast.Expression> parameters = new ArrayList<>();
+                    while (!peek(")")) {
+                        Ast.Expression nextExp = parseExpression();
+                        parameters.add(nextExp);
+                        //check for separating comma
+                        if (peek(",")) {
+                            match(",");
+                        }
+                    }
+                    if (!peek(")")) {
+                        throw new ParseException("Missing )", tokens.index);
+                    }
+                    match(")");
+                    return new Ast.Expression.Function(temp, parameters);
+                }
+                else if (peek("[")) {
+                    match("[");
+                    //list, get next expression
+                    String nextName = tokens.get(0).getLiteral();
+                    Ast.Expression nextExp = parseExpression();
+                    if (peek("]")) {
+                        match("[");
+                    }
+                    else {
+                        throw new ParseException("Missing ]", tokens.index);
+                    }
+                    return new Ast.Expression.Access(Optional.of(new Ast.Expression.Access(Optional.empty(), nextName)), temp);
+                }
+                else {
+                    //normal identifier
+                    return new Ast.Expression.Access(Optional.empty(), temp);
+                }
             }
         }
         else if (peek(Token.Type.INTEGER)) {
@@ -341,6 +370,18 @@ public final class Parser {
             match(Token.Type.STRING);
             //edit the string
             return new Ast.Expression.Literal(editString(temp));
+        }
+        else if (peek(Token.Type.OPERATOR) && peek("(")) {
+            //create group expression
+            match("(");
+            Ast.Expression inside = parseExpression();
+            if (peek(")")) {
+                match(")");
+                return new Ast.Expression.Group(inside);
+            }
+            else {
+                throw new ParseException("Missing )", tokens.index);
+            }
         }
         return new Ast.Expression.Literal(null);
 
