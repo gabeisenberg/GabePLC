@@ -199,7 +199,7 @@ public final class Parser {
         String op = tokens.get(0).getLiteral();
         match(Token.Type.OPERATOR);
         //get second comp exp
-        Ast.Expression rhs = parseComparisonExpression();
+        Ast.Expression rhs = parseLogicalExpression();
         return new Ast.Expression.Binary(op, lhs, rhs);
     }
 
@@ -218,7 +218,7 @@ public final class Parser {
         String op = tokens.get(0).getLiteral();
         match(Token.Type.OPERATOR);
         //get second add exp
-        Ast.Expression rhs = parseAdditiveExpression();
+        Ast.Expression rhs = parseComparisonExpression();
         return new Ast.Expression.Binary(op, lhs, rhs);
     }
 
@@ -237,7 +237,7 @@ public final class Parser {
         String op = tokens.get(0).getLiteral();
         match(Token.Type.OPERATOR);
         //get second multiplicative exp
-        Ast.Expression rhs = parseMultiplicativeExpression();
+        Ast.Expression rhs = parseAdditiveExpression();
         return new Ast.Expression.Binary(op, lhs, rhs);
     }
 
@@ -256,7 +256,7 @@ public final class Parser {
         String op = tokens.get(0).getLiteral();
         match(Token.Type.OPERATOR);
         //get second multiplicative exp
-        Ast.Expression rhs = parsePrimaryExpression();
+        Ast.Expression rhs = parseMultiplicativeExpression();
         return new Ast.Expression.Binary(op, lhs, rhs);
     }
 
