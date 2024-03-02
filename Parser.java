@@ -34,16 +34,37 @@ public final class Parser {
      * Parses the {@code source} rule.
      */
     public Ast.Source parseSource() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        List<Ast.Global> globals = new ArrayList<>();
+        List<Ast.Function> functions = new ArrayList<>();
+
+        while (tokens.has(0)) {
+            if (peek("VAL") || peek("VAR")) {
+                globals.add(parseGlobal());
+            } else if (peek("FUN")) {
+                functions.add(parseFunction());
+            } else {
+                throw new ParseException("Unexpected token: " + tokens.get(0).getLiteral(), tokens.get(0).getIndex());
+            }
+        }
+
+        return new Ast.Source(globals, functions);
     }
+
 
     /**
      * Parses the {@code global} rule. This method should only be called if the
      * next tokens start a global, aka {@code LIST|VAL|VAR}.
      */
     public Ast.Global parseGlobal() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        if (peek("VAL")) {
+            return parseImmutable();
+        } else if (peek("VAR")) {
+            return parseMutable();
+        } else {
+            throw new ParseException("Expected 'VAL' or 'VAR'", tokens.get(0).getIndex());
+        }
     }
+
 
     /**
      * Parses the {@code list} rule. This method should only be called if the
@@ -58,32 +79,56 @@ public final class Parser {
      * next token declares a mutable global variable, aka {@code VAR}.
      */
     public Ast.Global parseMutable() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        match("VAR");
+        String name = tokens.get(0).getLiteral();
+        match(Token.Type.IDENTIFIER);
+        match("=");
+        Ast.Expression value = parseExpression();
+        match(";");
+        return new Ast.Global(name, true, Optional.of(value));
     }
 
-    /**
-     * Parses the {@code immutable} rule. This method should only be called if the
-     * next token declares an immutable global variable, aka {@code VAL}.
-     */
     public Ast.Global parseImmutable() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        match("VAL");
+        String name = tokens.get(0).getLiteral();
+        match(Token.Type.IDENTIFIER);
+        match("=");
+        Ast.Expression value = parseExpression();
+        match(";");
+        return new Ast.Global(name, false, Optional.of(value));
     }
+
 
     /**
      * Parses the {@code function} rule. This method should only be called if the
      * next tokens start a method, aka {@code FUN}.
      */
     public Ast.Function parseFunction() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        match("FUN");
+        String name = tokens.get(0).getLiteral();
+        match(Token.Type.IDENTIFIER);
+        match("(");
+        // Assuming no parameters for simplicity; adjust as needed
+        match(")");
+        match("DO");
+        List<Ast.Statement> statements = parseBlock();
+        match("END");
+        return new Ast.Function(name, Collections.emptyList(), statements); // Adjust for parameters
     }
+
 
     /**
      * Parses the {@code block} rule. This method should only be called if the
      * preceding token indicates the opening a block of statements.
      */
     public List<Ast.Statement> parseBlock() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        List<Ast.Statement> statements = new ArrayList<>();
+        while (!peek("END")) {
+            statements.add(parseStatement());
+        }
+        return statements;
     }
+
 
     /**
      * Parses the {@code statement} rule and delegates to the necessary method.
@@ -128,8 +173,21 @@ public final class Parser {
      * method should only be called if the next tokens start a declaration
      * statement, aka {@code LET}.
      */
+
+    //"Let identifier ('=' expression)? ';'
     public Ast.Statement.Declaration parseDeclarationStatement() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        match("LET");
+        if (!match(Token.Type.IDENTIFIER)){
+            //throw a parse exception
+            throw new ParseException("Expected identifier but was not provided", -1);
+        }
+        String name = tokens.get(-1).getLiteral();
+        //do not need to test for reserved keywords yet
+        Optional<Ast.Expression> value = Optional.empty();
+        if (match("=")){
+            value = Optional.of(parseExpression());
+        }
+        return new Ast.Statement.Declaration(name, value);
     }
 
     /**
@@ -151,8 +209,8 @@ public final class Parser {
     }
 
     /**
-     * Parses a case or default statement block from the {@code switch} rule. 
-     * This method should only be called if the next tokens start the case or 
+     * Parses a case or default statement block from the {@code switch} rule.
+     * This method should only be called if the next tokens start the case or
      * default block of a switch statement, aka {@code CASE} or {@code DEFAULT}.
      */
     public Ast.Statement.Case parseCaseStatement() throws ParseException {
@@ -429,45 +487,42 @@ public final class Parser {
     //helper functions i made
 
     public char editChar(String temp) {
-        //weird bug where i remove quotes are char disappears for escape chars
+        char test = temp.charAt(2);
+        int test2 = temp.length();
         if (temp.length() == 3) {
-            var check3 = temp.charAt(1);
+            // Handles a single character or an escaped character like '\n', '\t', etc.
             return temp.charAt(1);
-        }
-        else {
-            //char is an escape
-            char check1 = temp.charAt(1);
-            char next = temp.charAt(2);
-            if (check1 != '\\') {
-                return 'x';
+        } else if (test == 'u') {
+            if (test2 == 8) {
+                return '\u000B'; // Vertical tab
             }
-            else {
-                //check if check2 is escape
-                if (next == 'b') {
-                    return '\b';
-                }
-                else if (next == 'n') {
-                    return '\n';
-                }
-                else if (next == 'r') {
-                    return '\r';
-                }
-                else if (next == 't') {
-                    return '\t';
-                }
-                else if (next == '\'') {
-                    return '\'';
-                }
-                else if (next == '\"') {
-                    return '\"';
-                }
-                else if (next == '\\') {
-                    return '\\';
-                }
+
+            // Add more conditions if other specific Unicode characters need to be supported
+        }else if (temp.length() == 4 && temp.charAt(1) == '\\') {
+            // Handles escape sequences
+            switch (temp.charAt(2)) {
+                case 'n':
+                    return '\n'; // Newline
+                case 't':
+                    return '\t'; // Tab
+                case 'r':
+                    return '\r'; // Carriage return
+                case 'b':
+                    return '\b'; // Backspace
+                case 'f':
+                    return '\f'; // Form feed
+                // Add cases for other escape sequences as needed
+                default:
+                    return 'x'; // Represents an unrecognized escape sequence
             }
         }
+        // Fallback for any other scenarios not covered
         return 'x';
     }
+
+
+
+
 
     public String editString(String temp) {
         //remove quotes

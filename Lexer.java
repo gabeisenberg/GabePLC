@@ -226,6 +226,7 @@ public final class Lexer {
      * The only field you need to access is {@link #index} for any {@link
      * ParseException} which is thrown.
      */
+
     public static final class CharStream {
         private final String input;
         private int index = 0;
