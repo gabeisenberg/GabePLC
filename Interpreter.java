@@ -384,8 +384,22 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
     }
     @Override
     public Environment.PlcObject visit(Ast.Expression.Access ast) {
-
-        throw new UnsupportedOperationException(); //TODO
+        try {
+            //get list
+            Environment.PlcObject temp = scope.lookupVariable(ast.getName()).getValue();
+            List<Object> tempList = (List<Object>) temp.getValue();
+            //get index
+            Ast.Expression val = ast.getOffset().get();
+            Ast.Expression.Literal valTemp = (Ast.Expression.Literal) val;
+            BigInteger tempIndex = (BigInteger) valTemp.getLiteral();
+            int index = tempIndex.intValue();
+            return Environment.create(tempList.get(index));
+        }
+        catch (Exception e) {
+            //return variable
+            Environment.PlcObject temp = scope.lookupVariable(ast.getName()).getValue();
+            return Environment.create(temp.getValue());
+        }
     }
 
     @Override
