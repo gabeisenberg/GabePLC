@@ -4,8 +4,8 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
@@ -77,13 +77,48 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
 
     @Override
     public Environment.PlcObject visit(Ast.Statement.Declaration ast) {
-        throw new UnsupportedOperationException(); //TODO (in lecture)
+        Environment.PlcObject value = ast.getValue().isPresent() ? visit(ast.getValue().get()) : Environment.NIL;
+        scope.defineVariable(ast.getName(), true, value);
+        return Environment.NIL;
     }
+
 
     @Override
     public Environment.PlcObject visit(Ast.Statement.Assignment ast) {
-        throw new UnsupportedOperationException(); //TODO
+        Environment.PlcObject value = visit(ast.getValue());
+
+        // Check if the receiver is an Access expression and extract the variable name
+        if (ast.getReceiver() instanceof Ast.Expression.Access) {
+            Ast.Expression.Access access = (Ast.Expression.Access) ast.getReceiver();
+            String variableName = access.getName();
+            //Object temp = this.scope.lookupVariable("list").getValue(); //gets temp
+            // Lookup the variable in the scope using the extracted name
+            Environment.Variable variable = scope.lookupVariable(variableName);
+            if (variable.getValue().getValue() instanceof String) {
+                variable.setValue(value); //if single variable
+            }
+            else {
+                //get index to change
+                Ast.Expression val = access.getOffset().get();
+                Ast.Expression.Literal valTemp = (Ast.Expression.Literal)val;
+                BigInteger tempIndex = (BigInteger)valTemp.getLiteral();
+                int index = tempIndex.intValue();
+                //get value to assign
+                Object newVal = value.getValue();
+                //get list to edit
+                Environment.PlcObject t1 = variable.getValue();
+                Object t2 = t1.getValue();
+                List<Object> temp = (List<Object>) t2;
+                //assign new list value
+                temp.set(index, newVal);
+            }
+        } else {
+            throw new RuntimeException("The receiver of an assignment must be a variable access.");
+        }
+
+        return Environment.NIL;
     }
+
 
     @Override
     public Environment.PlcObject visit(Ast.Statement.If ast) {
@@ -92,11 +127,13 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
 
     @Override
     public Environment.PlcObject visit(Ast.Statement.Switch ast) {
+
         throw new UnsupportedOperationException(); //TODO
     }
 
     @Override
     public Environment.PlcObject visit(Ast.Statement.Case ast) {
+
         throw new UnsupportedOperationException(); //TODO
     }
 
@@ -107,6 +144,7 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
 
     @Override
     public Environment.PlcObject visit(Ast.Statement.Return ast) {
+
         throw new UnsupportedOperationException(); //TODO
     }
 
@@ -120,6 +158,7 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
     }
 
 
+
     @Override
     public Environment.PlcObject visit(Ast.Expression.Group ast) {
         //check if literal or binary
@@ -127,6 +166,7 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
         return visit(exp);
         //throw new UnsupportedOperationException(); //TODO
     }
+
 
     @Override
     public Environment.PlcObject visit(Ast.Expression.Binary ast) {
@@ -301,7 +341,7 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
                 else {
                     throw new RuntimeException("Invalid types for - operator");
                 }
-            // Add other operators here...
+                // Add other operators here...
             default:
                 throw new RuntimeException("Unsupported operator: " + ast.getOperator());
         }
@@ -321,16 +361,26 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
         }
         return result;
     }
-
     @Override
     public Environment.PlcObject visit(Ast.Expression.Access ast) {
+
         throw new UnsupportedOperationException(); //TODO
     }
 
     @Override
     public Environment.PlcObject visit(Ast.Expression.Function ast) {
-        throw new UnsupportedOperationException(); //TODO
+        // Look up the function in the current scope by its name and the number of arguments.
+        Environment.Function function = scope.lookupFunction(ast.getName(), ast.getArguments().size());
+
+        // Evaluate all argument expressions to get their values as PlcObjects.
+        List<Environment.PlcObject> evaluatedArgs = ast.getArguments().stream()
+                .map(this::visit) // Visit (evaluate) each argument expression.
+                .collect(Collectors.toList());
+
+        // Invoke the function with the evaluated arguments and return its result.
+        return function.invoke(evaluatedArgs);
     }
+
 
     @Override
     public Environment.PlcObject visit(Ast.Expression.PlcList ast) {
@@ -342,6 +392,7 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
         }
         return Environment.create(resVals);
     }
+
 
     /**
      * Helper function to ensure an object is of the appropriate type.
