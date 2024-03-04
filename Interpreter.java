@@ -94,10 +94,7 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
             //Object temp = this.scope.lookupVariable("list").getValue(); //gets temp
             // Lookup the variable in the scope using the extracted name
             Environment.Variable variable = scope.lookupVariable(variableName);
-            if (variable.getValue().getValue() instanceof String) {
-                variable.setValue(value); //if single variable
-            }
-            else {
+            try { //check if list
                 //get index to change
                 Ast.Expression val = access.getOffset().get();
                 Ast.Expression.Literal valTemp = (Ast.Expression.Literal)val;
@@ -112,6 +109,10 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
                 //assign new list value
                 temp.set(index, newVal);
             }
+            catch (Exception e) {
+                //must be a single variable
+                variable.setValue(value);
+            }
         } else {
             throw new RuntimeException("The receiver of an assignment must be a variable access.");
         }
@@ -122,7 +123,26 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
 
     @Override
     public Environment.PlcObject visit(Ast.Statement.If ast) {
-        throw new UnsupportedOperationException(); //TODO
+        Ast.Expression.Literal temp = (Ast.Expression.Literal)ast.getCondition();
+        if (temp.getLiteral() instanceof Boolean) {
+            //evaluate
+            Boolean cond = (Boolean)temp.getLiteral();
+            List<Ast.Statement> valList = null;
+            if (cond) {
+                valList = ast.getThenStatements();
+            }
+            else {
+                valList = ast.getElseStatements();
+            }
+            for (Ast.Statement i : valList) {
+                visit(i);
+            }
+        }
+        else {
+            //error, do not proceed
+            throw new RuntimeException("Not Boolean for If statement");
+        }
+        return Environment.NIL;
     }
 
     @Override
@@ -144,7 +164,8 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
 
     @Override
     public Environment.PlcObject visit(Ast.Statement.Return ast) {
-
+        /*Environment.PlcObject temp = visit(ast.getValue());
+        throw new Return(temp); //pass in environment plc value from visit*/
         throw new UnsupportedOperationException(); //TODO
     }
 
@@ -408,7 +429,7 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
     /**
      * Exception class for returning values.
      */
-    private static class Return extends RuntimeException {
+    public static class Return extends RuntimeException {
 
         private final Environment.PlcObject value;
 
