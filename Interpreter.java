@@ -106,8 +106,13 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
                 Environment.PlcObject t1 = variable.getValue();
                 Object t2 = t1.getValue();
                 List<Object> temp = (List<Object>) t2;
-                //assign new list value
-                temp.set(index, newVal);
+                //assign new list value, check for out of bounds
+                try {
+                    temp.set(index, newVal);
+                }
+                catch (Exception e) {
+                    throw new RuntimeException("Out of bounds for visit!");
+                }
             }
             catch (Exception e) {
                 //must be a single variable
@@ -147,14 +152,37 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
 
     @Override
     public Environment.PlcObject visit(Ast.Statement.Switch ast) {
-
-        throw new UnsupportedOperationException(); //TODO
+        //get condition
+        Ast.Expression cond = ast.getCondition();
+        String condName = ((Ast.Expression.Access)cond).getName();
+        Object condValue = scope.lookupVariable(condName).getValue().getValue();
+        //get list of cases
+        List<Ast.Statement.Case> cases = ast.getCases();
+        for (int i = 0; i < cases.size(); i++) {
+            Ast.Statement.Case c = cases.get(i);
+            //check if condition equals case value
+            Object value = ((Ast.Expression.Literal)c.getValue().get()).getLiteral();
+            if (condValue.equals(value)) {
+                //evaluate case expressions
+                visit(c);
+                break;
+            }
+            if (i == cases.size() - 1) {
+                //default
+                visit(c);
+            }
+        }
+        return Environment.NIL;
     }
 
     @Override
     public Environment.PlcObject visit(Ast.Statement.Case ast) {
-
-        throw new UnsupportedOperationException(); //TODO
+        List<Ast.Statement> sts = ast.getStatements();
+        for (Ast.Statement s : sts) {
+            //evaluate
+            visit(s);
+        }
+        return Environment.NIL;
     }
 
     @Override
