@@ -187,7 +187,15 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
 
     @Override
     public Environment.PlcObject visit(Ast.Statement.While ast) {
-        throw new UnsupportedOperationException(); //TODO (in lecture)
+        Ast.Expression cond = ast.getCondition();
+        while (visit(cond).getValue() instanceof Boolean && visit(cond).getValue().equals(true)) {
+            //execute statements
+            List<Ast.Statement> sts = ast.getStatements();
+            for (Ast.Statement s : sts) {
+                visit(s);
+            }
+        }
+        return Environment.NIL;
     }
 
     @Override
