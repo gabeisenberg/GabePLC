@@ -24,16 +24,35 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
         return scope;
     }
 
+    //make global list of globals?
+    List<Ast.Global> globals = null;
+
     @Override
     public Environment.PlcObject visit(Ast.Source ast) {
-
+        //evaluate globals
+        globals = ast.getGlobals();
         for (Ast.Global global : ast.getGlobals()) {
             visit(global);
         }
-        for (Ast.Function function : ast.getFunctions()) {
-            visit(function);
+        //find main function
+        Environment.PlcObject mainFunc = null;
+        List<Ast.Function> funcs = ast.getFunctions();
+        for (Ast.Function f : funcs) {
+            if (f.getName().equals("main")) {
+                mainFunc = visit(f);
+            }
+            else {
+                visit(f);
+            }
         }
-        return Environment.NIL;
+        if (mainFunc.equals(null)) {
+            throw new RuntimeException("No main found!");
+        }
+        //invoke main
+        List<Environment.PlcObject> list = new ArrayList<>();
+        Environment.Function temp = scope.lookupFunction("main", 0);
+        Environment.PlcObject temp1 = temp.invoke(list);
+        return temp1;
     }
 
     @Override
@@ -48,9 +67,15 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
     @Override
     public Environment.PlcObject visit(Ast.Function ast) {
         scope.defineFunction(ast.getName(), ast.getParameters().size(), args -> {
-            Scope previous = scope;
+            Scope prev = scope;
             try {
-                scope = new Scope(scope);
+                scope = new Scope(scope.getParent());
+                //update globals?
+                if (globals != null) {
+                    for (Ast.Global global : globals) {
+                        visit(global);
+                    }
+                }
                 for (int i = 0; i < ast.getParameters().size(); i++) {
                     scope.defineVariable(ast.getParameters().get(i), true, args.get(i));
                 }
@@ -58,10 +83,12 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
                     visit(statement);
                 }
                 return Environment.NIL;
-            } catch (Return returnValue) {
-                return returnValue.value;
-            } finally {
-                scope = previous;
+            }
+            catch (Return res) {
+                return res.value;
+            }
+            finally {
+                scope = prev;
             }
         });
         return Environment.NIL;
@@ -200,9 +227,8 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
 
     @Override
     public Environment.PlcObject visit(Ast.Statement.Return ast) {
-        /*Environment.PlcObject temp = visit(ast.getValue());
-        throw new Return(temp); //pass in environment plc value from visit*/
-        throw new UnsupportedOperationException(); //TODO
+        Environment.PlcObject val = visit(ast.getValue());
+        throw new Return(val);
     }
 
 
@@ -376,7 +402,7 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
                 }
             case "+":
                 // Check for string concatenation first
-                if (left.getValue() instanceof String || right.getValue() instanceof String) { // if either left or right is a string, concatenate
+                if (left.getValue() instanceof String && right.getValue() instanceof String) { // if either left or right is a string, concatenate
                     return Environment.create(left.getValue().toString() + right.getValue().toString());
                 }
                 else if (left.getValue() instanceof BigInteger && right.getValue() instanceof BigInteger) { //both are BigInteger
