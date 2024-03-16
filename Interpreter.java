@@ -45,10 +45,23 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
                 visit(f);
             }
         }
-        if (mainFunc.equals(null)) {
-            throw new RuntimeException("No main found!");
+        Boolean inParent = false;
+        if (mainFunc == null) {
+            try {
+                this.scope.getParent().lookupFunction("main", 0);
+                inParent = true;
+            }
+            catch (Exception e) {
+                throw new RuntimeException("No main found!");
+            }
         }
         //invoke main
+        if (inParent) {
+            List<Environment.PlcObject> list = new ArrayList<>();
+            Environment.Function tempMain = this.scope.getParent().lookupFunction("main", 0);
+            Environment.PlcObject temp2 = tempMain.invoke(list);
+            return temp2;
+        }
         List<Environment.PlcObject> list = new ArrayList<>();
         Environment.Function temp = scope.lookupFunction("main", 0);
         Environment.PlcObject temp1 = temp.invoke(list);
@@ -98,7 +111,8 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
 
     @Override
     public Environment.PlcObject visit(Ast.Statement.Expression ast) {
-        return visit(ast.getExpression());
+        visit(ast.getExpression());
+        return Environment.NIL;
     }
 
 
@@ -458,7 +472,8 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
                 .collect(Collectors.toList());
 
         // Invoke the function with the evaluated arguments and return its result.
-        return function.invoke(evaluatedArgs);
+        Environment.PlcObject temp = function.invoke(evaluatedArgs);
+        return temp;
     }
 
 
