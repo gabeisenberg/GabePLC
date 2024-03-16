@@ -215,7 +215,11 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
     @Override
     public Environment.PlcObject visit(Ast.Statement.While ast) {
         Ast.Expression cond = ast.getCondition();
-        while (visit(cond).getValue() instanceof Boolean && visit(cond).getValue().equals(true)) {
+        Environment.PlcObject vCond = visit(cond);
+        if (!(vCond.getValue() instanceof Boolean)) {
+            throw new RuntimeException("wrong condition type!");
+        }
+        while (vCond.getValue() instanceof Boolean && vCond.getValue().equals(true)) {
             //execute statements
             List<Ast.Statement> sts = ast.getStatements();
             for (Ast.Statement s : sts) {
@@ -294,20 +298,9 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
                 }
             case "<":
                 //check if types are int or decimal?
-                if (left.getValue() instanceof BigInteger) {
-                    BigInteger lhsInt = (BigInteger)left.getValue();
-                    BigInteger rhsInt = requireType(BigInteger.class, right);
-                    int res = lhsInt.compareTo(rhsInt);
-                    if (res < 0) {
-                        return Environment.create(true);
-                    }
-                    else {
-                        return Environment.create(false);
-                    }
-                }
-                else if (left.getValue() instanceof BigDecimal) {
-                    BigDecimal lhsInt = (BigDecimal)left.getValue();
-                    BigDecimal rhsInt = requireType(BigDecimal.class, left);
+                if (left.getValue() instanceof Comparable) {
+                    Comparable lhsInt = (Comparable) left.getValue();
+                    Comparable rhsInt = requireType(Comparable.class, right);
                     int res = lhsInt.compareTo(rhsInt);
                     if (res < 0) {
                         return Environment.create(true);
@@ -320,20 +313,10 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
                     throw new RuntimeException("Wrong < Type");
                 }
             case ">": {
-                if (left.getValue() instanceof BigInteger) {
-                    BigInteger lhsInt = (BigInteger)left.getValue();
-                    BigInteger rhsInt = requireType(BigInteger.class, right);
-                    int res = lhsInt.compareTo(rhsInt);
-                    if (res > 0) {
-                        return Environment.create(true);
-                    }
-                    else {
-                        return Environment.create(false);
-                    }
-                }
-                else if (left.getValue() instanceof BigDecimal) {
-                    BigDecimal lhsInt = (BigDecimal)left.getValue();
-                    BigDecimal rhsInt = requireType(BigDecimal.class, left);
+                //check if types are int or decimal?
+                if (left.getValue() instanceof Comparable) {
+                    Comparable lhsInt = (Comparable) left.getValue();
+                    Comparable rhsInt = requireType(Comparable.class, right);
                     int res = lhsInt.compareTo(rhsInt);
                     if (res > 0) {
                         return Environment.create(true);
@@ -345,7 +328,7 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
                 else {
                     throw new RuntimeException("Wrong < Type");
                 }
-            }
+                }
             case "==":
                 if (left.getValue().equals(right.getValue())) {
                     //do i need to check if classes are equal?
