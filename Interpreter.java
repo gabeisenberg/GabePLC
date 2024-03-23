@@ -24,22 +24,17 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
         return scope;
     }
 
-    //make global list of globals?
-    List<Ast.Global> globals = null;
-
     @Override
     public Environment.PlcObject visit(Ast.Source ast) {
-        //evaluate globals
-        globals = ast.getGlobals();
         for (Ast.Global global : ast.getGlobals()) {
             visit(global);
         }
         //find main function
-        Environment.PlcObject mainFunc = null;
+        Ast.Function mainFunc = null;
         List<Ast.Function> funcs = ast.getFunctions();
         for (Ast.Function f : funcs) {
             if (f.getName().equals("main")) {
-                mainFunc = visit(f);
+                mainFunc = f;
             }
             else {
                 visit(f);
@@ -56,6 +51,7 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
             }
         }
         //invoke main
+        visit(mainFunc);
         if (inParent) {
             List<Environment.PlcObject> list = new ArrayList<>();
             Environment.Function tempMain = this.scope.getParent().lookupFunction("main", 0);
@@ -79,21 +75,16 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
 
     @Override
     public Environment.PlcObject visit(Ast.Function ast) {
+        Scope prev = scope;
         scope.defineFunction(ast.getName(), ast.getParameters().size(), args -> {
-            Scope prev = scope;
             try {
-                scope = new Scope(scope.getParent());
-                //update globals?
-                if (globals != null) {
-                    for (Ast.Global global : globals) {
-                        visit(global);
-                    }
-                }
+                scope = new Scope(prev);
                 for (int i = 0; i < ast.getParameters().size(); i++) {
                     scope.defineVariable(ast.getParameters().get(i), true, args.get(i));
                 }
                 for (Ast.Statement statement : ast.getStatements()) {
-                    visit(statement);
+                    Object temp1 = visit(statement);
+                    temp1 = null;
                 }
                 return Environment.NIL;
             }
@@ -455,10 +446,27 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
             return Environment.create(tempList.get(index));
         }
         catch (Exception e) {
-            //return variable
+            //return variable, check for global
             Environment.PlcObject temp = scope.lookupVariable(ast.getName()).getValue();
+            /*Scope tempScope = scope.getParent();
+            while (tempScope != null) {
+                Environment.PlcObject tempVar = null;
+                try {
+                    tempVar = tempScope.lookupVariable(ast.getName()).getValue();
+                }
+                catch (Exception f) {
+                    tempVar = null;
+                }
+                if (tempVar != null && tempScope.getParent().getParent() == null) //check if global
+                    temp = tempVar;
+                tempScope = tempScope.getParent();
+            }*/
             return Environment.create(temp.getValue());
         }
+    }
+
+    public Boolean checkGlobal(Scope s) {
+        return false;
     }
 
     @Override
