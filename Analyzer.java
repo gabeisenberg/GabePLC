@@ -371,10 +371,35 @@ public final class Analyzer implements Ast.Visitor<Void> {
     }
     @Override
     public Void visit(Ast.Expression.PlcList ast) {
-        throw new UnsupportedOperationException(); // TODO
+        Environment.Type listType = ast.getType();
+        for (Ast.Expression e : ast.getValues()) {
+            visit(e);
+            if (!e.getType().equals(listType)) {
+                throw new RuntimeException("Wrong item type for list!");
+            }
+        }
+        return null;
     }
     public static void requireAssignable(Environment.Type target, Environment.Type
             type) {
-        throw new UnsupportedOperationException(); // TODO
+        Boolean f1 = true;
+        if (target.equals(Environment.Type.ANY)) {
+            f1 = true;
+        }
+        else if (target.equals(Environment.Type.COMPARABLE)) {
+            if (type.equals(Environment.Type.INTEGER) || type.equals(Environment.Type.CHARACTER)
+            || type.equals(Environment.Type.DECIMAL) || type.equals(Environment.Type.STRING)) {
+                f1 = true;
+            }
+            else {
+                f1 = false;
+            }
+        }
+        else if (!target.equals(type)) {
+            f1 = false;
+        }
+        if (!f1) {
+            throw new RuntimeException("wrong type");
+        }
     }
 }
