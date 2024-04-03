@@ -168,7 +168,24 @@ public final class Analyzer implements Ast.Visitor<Void> {
     }
     @Override
     public Void visit(Ast.Statement.If ast) {
-        throw new UnsupportedOperationException(); // TODO
+        visit(ast.getCondition());
+        if (!ast.getCondition().getType().equals(Environment.Type.BOOLEAN)) {
+            throw new RuntimeException("Not Boolean condition for if!");
+        }
+        if (ast.getThenStatements().isEmpty()) {
+            throw new RuntimeException("Then statements empty for if!");
+        }
+        for (Ast.Statement s : ast.getThenStatements()) {
+            Scope prev = scope;
+            scope = new Scope(scope);
+            visit(s);
+        }
+        for (Ast.Statement s : ast.getElseStatements()) {
+            Scope prev = scope;
+            scope = new Scope(scope);
+            visit(s);
+        }
+        return null;
     }
     @Override
     public Void visit(Ast.Statement.Switch ast) {
@@ -337,7 +354,12 @@ public final class Analyzer implements Ast.Visitor<Void> {
     }
     @Override
     public Void visit(Ast.Expression.Access ast) {
-        throw new UnsupportedOperationException(); // TODO
+        ast.setVariable(scope.lookupVariable(ast.getName()));
+        Ast.Expression e = ast.getOffset().get();
+        if (ast.getOffset().isPresent() && (!(ast.getOffset().get().getType().equals(Environment.Type.INTEGER)))) {
+            throw new RuntimeException("offset is not integer");
+        }
+        return null;
     }
     @Override
     public Void visit(Ast.Expression.Function ast) {
