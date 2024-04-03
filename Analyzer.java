@@ -341,21 +341,10 @@ public final class Analyzer implements Ast.Visitor<Void> {
     }
     @Override
     public Void visit(Ast.Expression.Function ast) {
-        //visit arguments
-        List<Environment.Type> types = new ArrayList<>();
+        ast.setFunction(scope.lookupFunction(ast.getName(), ast.getArguments().size()));
         for (Ast.Expression e : ast.getArguments()) {
             visit(e);
-            types.add(e.getType());
         }
-        //get return type
-        Environment.Type reType = scope.lookupFunction(ast.getName(), ast.getArguments().size()).getReturnType();
-        //define function
-        String jvName = ast.getName();
-        if (ast.getName().equals("print")) {
-            jvName = "System.out.println";
-        }
-        Environment.Function func = new Environment.Function(ast.getName(), jvName, types, reType, args -> Environment.NIL);
-        ast.setFunction(func);
         return null;
     }
     @Override
