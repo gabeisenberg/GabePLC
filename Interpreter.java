@@ -51,13 +51,13 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
             }
         }
         //invoke main
-        visit(mainFunc);
         if (inParent) {
             List<Environment.PlcObject> list = new ArrayList<>();
             Environment.Function tempMain = this.scope.getParent().lookupFunction("main", 0);
             Environment.PlcObject temp2 = tempMain.invoke(list);
             return temp2;
         }
+        visit(mainFunc);
         List<Environment.PlcObject> list = new ArrayList<>();
         Environment.Function temp = scope.lookupFunction("main", 0);
         Environment.PlcObject temp1 = temp.invoke(list);
@@ -220,20 +220,29 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
     @Override
     public Environment.PlcObject visit(Ast.Statement.While ast) {
         Ast.Expression cond = ast.getCondition();
-        Environment.PlcObject vCond = visit(cond);
-        if (!(vCond.getValue() instanceof Boolean)) {
-            throw new RuntimeException("wrong condition type!");
-        }
-        while (vCond.getValue() instanceof Boolean && vCond.getValue().equals(true)) {
-            //execute statements
+
+        while (true) {
+            Environment.PlcObject vCond = visit(cond);
+
+            if (!(vCond.getValue() instanceof Boolean)) {
+                throw new RuntimeException("Wrong condition type!");
+            }
+
+            boolean conditionValue = (Boolean) vCond.getValue();
+
+            if (!conditionValue) {
+                break; // Exit the loop if the condition is false
+            }
+
+            // Execute statements
             List<Ast.Statement> sts = ast.getStatements();
             for (Ast.Statement s : sts) {
                 visit(s);
             }
         }
+
         return Environment.NIL;
     }
-
     @Override
     public Environment.PlcObject visit(Ast.Statement.Return ast) {
         Environment.PlcObject val = visit(ast.getValue());
@@ -333,7 +342,7 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
                 else {
                     throw new RuntimeException("Wrong < Type");
                 }
-                }
+            }
             case "==":
                 if (left.getValue().equals(right.getValue())) {
                     //do i need to check if classes are equal?
