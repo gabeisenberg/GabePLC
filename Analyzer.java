@@ -43,7 +43,7 @@ public final class Analyzer implements Ast.Visitor<Void> {
                                     expression).getLiteral();
                             if (value instanceof Integer) {
                                 System.out.println("reached value is instanceof BigInteger");
-                                        returnTypeIsInteger = true;
+                                returnTypeIsInteger = true;
                                 break;
                             }
                         }
@@ -148,8 +148,12 @@ public final class Analyzer implements Ast.Visitor<Void> {
         else if (s.equals("Boolean")) {
             return Environment.Type.BOOLEAN;
         }
-        return Environment.Type.NIL;
+        else if (s.equals("Nil")) {
+            return Environment.Type.NIL;
+        }
+        throw new RuntimeException("wrong type!");
     }
+
     @Override
     public Void visit(Ast.Statement.Expression ast) {
         if (!(ast.getExpression() instanceof  Ast.Expression.Function)) {
@@ -160,12 +164,59 @@ public final class Analyzer implements Ast.Visitor<Void> {
     }
     @Override
     public Void visit(Ast.Statement.Declaration ast) {
-        throw new UnsupportedOperationException(); // TODO
+        if (!ast.getTypeName().isPresent()) {
+            if (!ast.getValue().isPresent()) {
+                throw new RuntimeException("no type/name present for declaration!");
+            }
+            else {
+                visit(ast.getValue().get());
+                //check that type is valid
+                if (ast.getValue().get().getType() instanceof Environment.Type) {
+                    Environment.Variable v = scope.defineVariable(ast.getName(), ast.getName(), ast.getValue().get().getType(), true, Environment.NIL);
+                    ast.setVariable(v);
+                    return null;
+                }
+                else {
+                    throw new RuntimeException("cant read type for declaration");
+                }
+            }
+        }
+        Environment.Variable v = scope.defineVariable(ast.getName(), ast.getName(), string2type(ast.getTypeName().get()), true, Environment.NIL);
+        ast.setVariable(v);
+        return null;
     }
+
     @Override
     public Void visit(Ast.Statement.Assignment ast) {
-        throw new UnsupportedOperationException(); // TODO
+        // Ensure the receiver is an access expression
+        if (!(ast.getReceiver() instanceof Ast.Expression.Access)) {
+            throw new RuntimeException("The receiver of the assignment must be an access expression.");
+        }
+
+        // Visit the receiver to resolve its variable (and thus, type)
+        visit(ast.getReceiver());
+        // Visit the value to ensure it's analyzed
+        visit(ast.getValue());
+
+        // Get the types
+        Environment.Type receiverType = ast.getReceiver().getType();
+        Environment.Type valueType = ast.getValue().getType();
+
+        // Check if the value is assignable to the receiver
+        if (!isAssignable2(valueType, receiverType)) {
+            throw new RuntimeException("The value is not assignable to the receiver. Expected type " + receiverType + ", but got " + valueType + ".");
+        }
+
+        return null;
     }
+
+    /**
+     * Checks if one type is assignable to another. This method assumes that you have an isAssignable method similar to the one you mentioned before.
+     */
+    private boolean isAssignable2(Environment.Type valueType, Environment.Type targetType) {
+        return valueType.equals(targetType) || valueType.equals(Environment.Type.ANY);
+    }
+
     @Override
     public Void visit(Ast.Statement.If ast) {
         visit(ast.getCondition());
@@ -189,12 +240,51 @@ public final class Analyzer implements Ast.Visitor<Void> {
     }
     @Override
     public Void visit(Ast.Statement.Switch ast) {
-        throw new UnsupportedOperationException(); // TODO
+        visit(ast.getCondition());
+        Environment.Type conditionType = ast.getCondition().getType();
+
+        boolean defaultCaseFound = false;
+        for (Ast.Statement.Case caseStmt : ast.getCases()) {
+            // Check for default case (last case with no value)
+            if (defaultCaseFound) {
+                throw new RuntimeException("DEFAULT case must be the last case.");
+            }
+
+            if (!caseStmt.getValue().isPresent()) {
+                defaultCaseFound = true;
+            } else {
+                // Ensure case value type matches condition type
+                visit(caseStmt.getValue().get());
+                if (!caseStmt.getValue().get().getType().equals(conditionType)) {
+                    throw new RuntimeException("Case value type does not match condition type.");
+                }
+            }
+
+            // Visit the case
+            visit(caseStmt);
+        }
+
+        return null;
     }
+
     @Override
     public Void visit(Ast.Statement.Case ast) {
-        throw new UnsupportedOperationException(); // TODO
+        // Create a new scope for the case
+        Scope originalScope = scope;
+        scope = new Scope(scope);
+
+        try {
+            for (Ast.Statement statement : ast.getStatements()) {
+                visit(statement);
+            }
+        } finally {
+            // Restore the original scope
+            scope = originalScope;
+        }
+
+        return null;
     }
+
     @Override
     public Void visit(Ast.Statement.While ast) {
         visit(ast.getCondition()); //vising to analyze
@@ -354,11 +444,23 @@ public final class Analyzer implements Ast.Visitor<Void> {
     }
     @Override
     public Void visit(Ast.Expression.Access ast) {
-        ast.setVariable(scope.lookupVariable(ast.getName()));
-        Ast.Expression e = ast.getOffset().get();
-        if (ast.getOffset().isPresent() && (!(ast.getOffset().get().getType().equals(Environment.Type.INTEGER)))) {
-            throw new RuntimeException("offset is not integer");
+        // Check if there's an offset (for array or list access)
+        ast.getOffset().ifPresent(offset -> {
+            visit(offset); // Ensure the offset expression is analyzed
+            if (!offset.getType().equals(Environment.Type.INTEGER)) {
+                throw new RuntimeException("Offset type must be Integer for accessing elements.");
+            }
+        });
+
+        // Look up the variable by name in the current scope
+        Environment.Variable variable = scope.lookupVariable(ast.getName());
+        if (variable == null) {
+            throw new RuntimeException("Variable '" + ast.getName() + "' not defined.");
         }
+
+        // Set the variable (and implicitly its type) on the AST node
+        ast.setVariable(variable);
+
         return null;
     }
     @Override
@@ -388,7 +490,7 @@ public final class Analyzer implements Ast.Visitor<Void> {
         }
         else if (target.equals(Environment.Type.COMPARABLE)) {
             if (type.equals(Environment.Type.INTEGER) || type.equals(Environment.Type.CHARACTER)
-            || type.equals(Environment.Type.DECIMAL) || type.equals(Environment.Type.STRING)) {
+                    || type.equals(Environment.Type.DECIMAL) || type.equals(Environment.Type.STRING)) {
                 f1 = true;
             }
             else {
