@@ -65,7 +65,9 @@ public final class Analyzer implements Ast.Visitor<Void> {
     }
     @Override
     public Void visit(Ast.Global ast) { //global done
-
+        if (ast.getValue().isPresent() && ast.getValue().get() instanceof Ast.Expression.PlcList) {
+            ((Ast.Expression.PlcList) ast.getValue().get()).setType(Environment.getType(ast.getTypeName()));
+        }
         ast.getValue().ifPresent(this::visit);
         // Fetch the type of the global variable from the environment.
         Environment.Type globalType = Environment.getType(ast.getTypeName());
@@ -99,8 +101,6 @@ public final class Analyzer implements Ast.Visitor<Void> {
         for (Ast.Statement s : ast.getStatements()) {
             if (s instanceof Ast.Statement.Return) {
                 r = (Ast.Statement.Return)s;
-                visit(r);
-                returnType = r.getValue().getType();
             }
         }
         //get variables and types
@@ -114,7 +114,11 @@ public final class Analyzer implements Ast.Visitor<Void> {
         if (returnType == null) {
             returnType = Environment.Type.NIL;
         }
-        Environment.Function f = scope.defineFunction(ast.getName(), ast.getName(), paramTypes, string2type(ast.getReturnTypeName().get()), args -> Environment.NIL);
+        else {
+            visit(r);
+            returnType = r.getValue().getType();
+        }
+        Environment.Function f = scope.defineFunction(ast.getName(), ast.getName(), paramTypes, Environment.getType(ast.getReturnTypeName().get()), args -> Environment.NIL);
         ast.setFunction(f);
         Scope prev = scope;
         scope = new Scope(scope);
@@ -130,28 +134,6 @@ public final class Analyzer implements Ast.Visitor<Void> {
         }
         scope = prev;
         return null;
-    }
-
-    public Environment.Type string2type(String s) {
-        if (s.equals("Integer")) {
-            return Environment.Type.INTEGER;
-        }
-        else if (s.equals("String")) {
-            return Environment.Type.STRING;
-        }
-        else if (s.equals("Decimal")) {
-            return Environment.Type.DECIMAL;
-        }
-        else if (s.equals("Character")) {
-            return Environment.Type.CHARACTER;
-        }
-        else if (s.equals("Boolean")) {
-            return Environment.Type.BOOLEAN;
-        }
-        else if (s.equals("Nil")) {
-            return Environment.Type.NIL;
-        }
-        throw new RuntimeException("wrong type!");
     }
 
     @Override
@@ -181,7 +163,7 @@ public final class Analyzer implements Ast.Visitor<Void> {
                 }
             }
         }
-        Environment.Variable v = scope.defineVariable(ast.getName(), ast.getName(), string2type(ast.getTypeName().get()), true, Environment.NIL);
+        Environment.Variable v = scope.defineVariable(ast.getName(), ast.getName(), Environment.getType(ast.getTypeName().get()), true, Environment.NIL);
         ast.setVariable(v);
         return null;
     }
@@ -353,26 +335,42 @@ public final class Analyzer implements Ast.Visitor<Void> {
     }
     @Override
     public Void visit(Ast.Expression.Binary ast) {
+        visit(ast.getRight());
+        visit(ast.getLeft());
+        Object lhLiteral = null;
+        Object rhLiteral = null;
+        if (ast.getLeft() instanceof Ast.Expression.Literal) {
+            lhLiteral = ((Ast.Expression.Literal)ast.getLeft()).getLiteral();
+        }
+        else if (ast.getLeft() instanceof Ast.Expression.Access) {
+            Ast.Expression.Access rhAccess = (Ast.Expression.Access)ast.getLeft();
+            lhLiteral = scope.lookupVariable(rhAccess.getName()).getValue().getValue();
+        }
+        else {
+            throw new RuntimeException("no lh object detected for binary");
+        }
+        if (ast.getRight() instanceof Ast.Expression.Literal) {
+            rhLiteral = ((Ast.Expression.Literal)ast.getRight()).getLiteral();
+        }
+        else if (ast.getRight() instanceof Ast.Expression.Access) {
+            Ast.Expression.Access rhAccess = (Ast.Expression.Access)ast.getRight();
+            rhLiteral = scope.lookupVariable(rhAccess.getName()).getValue().getValue();
+        }
+        else {
+            throw new RuntimeException("no rh object detected for binary");
+        }
+        //check if left or right is an expression or a variable
         String op = ast.getOperator();
         if (op.equals("&&") || op.equals("||")) {
-            Ast.Expression.Literal lhs = (Ast.Expression.Literal)ast.getLeft();
-            Ast.Expression.Literal rhs = (Ast.Expression.Literal)ast.getRight();
-            if (!(lhs.getLiteral() instanceof Boolean && rhs.getLiteral()
-                    instanceof Boolean)) {
+            if (!(lhLiteral instanceof Boolean && rhLiteral instanceof Boolean)) {
                 throw new RuntimeException("Wrong for && or ||");
             }
-            visit(ast.getRight());
-            visit(ast.getLeft());
             ast.setType(Environment.Type.BOOLEAN);
         }
-        else if (op.equals("<") || op.equals(">") || op.equals("==") ||
-                op.equals("!=")) {
-            Ast.Expression.Literal lhs = (Ast.Expression.Literal)ast.getLeft();
-            Ast.Expression.Literal rhs = (Ast.Expression.Literal)ast.getRight();
-            if (lhs.getLiteral() instanceof Comparable && rhs.getLiteral()
-                    instanceof Comparable) {
-                Comparable lhsComp = (Comparable)lhs.getLiteral();
-                Comparable rhsComp = (Comparable)rhs.getLiteral();
+        else if (op.equals("<") || op.equals(">") || op.equals("==") || op.equals("!=")) {
+            if (lhLiteral instanceof Comparable && rhLiteral instanceof Comparable) {
+                Comparable lhsComp = (Comparable)lhLiteral;
+                Comparable rhsComp = (Comparable)rhLiteral;
                 try {
                     lhsComp.compareTo(rhsComp);
                 }
@@ -384,24 +382,13 @@ public final class Analyzer implements Ast.Visitor<Void> {
             throw new RuntimeException("Wrong types to compare!");
         }
         else if (op.equals("+")) {
-            Ast.Expression.Literal lhs = (Ast.Expression.Literal)ast.getLeft();
-            Ast.Expression.Literal rhs = (Ast.Expression.Literal)ast.getRight();
-            if (lhs.getLiteral() instanceof String || rhs.getLiteral() instanceof
-                    String) {
-                visit(ast.getLeft());
-                visit(ast.getRight());
+            if (lhLiteral instanceof String || rhLiteral instanceof String) {
                 ast.setType(Environment.Type.STRING);
             }
-            else if (lhs.getLiteral() instanceof BigInteger && rhs.getLiteral()
-                    instanceof BigInteger) {
-                visit(ast.getLeft());
-                visit(ast.getRight());
+            else if (lhLiteral instanceof BigInteger && rhLiteral instanceof BigInteger) {
                 ast.setType(Environment.Type.INTEGER);
             }
-            else if (lhs.getLiteral() instanceof BigDecimal && rhs.getLiteral()
-                    instanceof BigDecimal) {
-                visit(ast.getLeft());
-                visit(ast.getRight());
+            else if (lhLiteral instanceof BigDecimal && rhLiteral instanceof BigDecimal) {
                 ast.setType(Environment.Type.DECIMAL);
             }
             else {
@@ -409,31 +396,18 @@ public final class Analyzer implements Ast.Visitor<Void> {
             }
         }
         else if (op.equals("-") || op.equals("*") || op.equals("/")) {
-            Ast.Expression.Literal lhs = (Ast.Expression.Literal)ast.getLeft();
-            Ast.Expression.Literal rhs = (Ast.Expression.Literal)ast.getRight();
-            if (lhs.getLiteral() instanceof BigInteger && rhs.getLiteral()
-                    instanceof BigInteger) {
-                visit(ast.getLeft());
-                visit(ast.getRight());
+            if (lhLiteral instanceof BigInteger && rhLiteral instanceof BigInteger) {
                 ast.setType(Environment.Type.INTEGER);
             }
-            else if (lhs.getLiteral() instanceof BigDecimal && rhs.getLiteral()
-                    instanceof BigDecimal) {
-                visit(ast.getLeft());
-                visit(ast.getRight());
+            else if (lhLiteral instanceof BigDecimal && rhLiteral instanceof BigDecimal) {
                 ast.setType(Environment.Type.DECIMAL);
             }
             else {
-                throw new RuntimeException("Wrong -*/ typings");
+                throw new RuntimeException("Wrong -* or / typings");
             }
         }
         else if (op.equals("^")) {
-            Ast.Expression.Literal lhs = (Ast.Expression.Literal)ast.getLeft();
-            Ast.Expression.Literal rhs = (Ast.Expression.Literal)ast.getRight();
-            if (lhs.getLiteral() instanceof BigInteger && rhs.getLiteral()
-                    instanceof BigInteger) {
-                visit(ast.getLeft());
-                visit(ast.getRight());
+            if (lhLiteral instanceof BigInteger && rhLiteral instanceof BigInteger) {
                 ast.setType(Environment.Type.INTEGER);
             }
             else {
@@ -444,6 +418,7 @@ public final class Analyzer implements Ast.Visitor<Void> {
     }
     @Override
     public Void visit(Ast.Expression.Access ast) {
+
         // Check if there's an offset (for array or list access)
         ast.getOffset().ifPresent(offset -> {
             visit(offset); // Ensure the offset expression is analyzed
@@ -476,9 +451,7 @@ public final class Analyzer implements Ast.Visitor<Void> {
         Environment.Type listType = ast.getType();
         for (Ast.Expression e : ast.getValues()) {
             visit(e);
-            if (!e.getType().equals(listType)) {
-                throw new RuntimeException("Wrong item type for list!");
-            }
+            requireAssignable(ast.getType(), e.getType());
         }
         return null;
     }
