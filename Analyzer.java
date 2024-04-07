@@ -441,8 +441,13 @@ public final class Analyzer implements Ast.Visitor<Void> {
     @Override
     public Void visit(Ast.Expression.Function ast) {
         ast.setFunction(scope.lookupFunction(ast.getName(), ast.getArguments().size()));
-        for (Ast.Expression e : ast.getArguments()) {
+        //visit expressions and check types
+        List<Environment.Type> types = ast.getFunction().getParameterTypes();
+        List<Ast.Expression> args = ast.getArguments();
+        for (int i = 0; i < types.size(); i++) {
+            Ast.Expression e = ast.getArguments().get(i);
             visit(e);
+            requireAssignable(types.get(i), e.getType());
         }
         return null;
     }
