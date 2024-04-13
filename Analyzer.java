@@ -101,6 +101,8 @@ public final class Analyzer implements Ast.Visitor<Void> {
         for (Ast.Statement s : ast.getStatements()) {
             if (s instanceof Ast.Statement.Return) {
                 r = (Ast.Statement.Return)s;
+                visit(r);
+                returnType = r.getValue().getType();
             }
         }
         //get variables and types
@@ -139,34 +141,43 @@ public final class Analyzer implements Ast.Visitor<Void> {
     @Override
     public Void visit(Ast.Statement.Expression ast) {
         if (!(ast.getExpression() instanceof  Ast.Expression.Function)) {
-            throw new RuntimeException("not a function for expression!");
+            throw new RuntimeException("not a function correctly done");
         }
-        visit(ast.getExpression());
-        return null;
+        else {
+            visit(ast.getExpression());
+            return null;
+        }
     }
     @Override
     public Void visit(Ast.Statement.Declaration ast) {
-        if (!ast.getTypeName().isPresent()) {
-            if (!ast.getValue().isPresent()) {
-                throw new RuntimeException("no type/name present for declaration!");
+        Environment.Type variableType = ast.getTypeName()
+                .map(Environment::getType)
+                .orElseGet(() -> ast.getValue()
+                        .map(value -> {
+                            visit(value); // Visit the value to determine its type
+                            return value.getType(); // Return the type of the value
+                        })
+                        .orElseThrow(() -> new RuntimeException("Declaration must have a type or an initializing value.")));
+
+        // If the declaration includes an initializing value, visit and check assignability
+        ast.getValue().ifPresent(value -> {
+            visit(value);
+            if (!isAssignable(value.getType(), variableType)) {
+                throw new RuntimeException("Type of the initializing value is not assignable to the declared variable type.");
             }
-            else {
-                visit(ast.getValue().get());
-                //check that type is valid
-                if (ast.getValue().get().getType() instanceof Environment.Type) {
-                    Environment.Variable v = scope.defineVariable(ast.getName(), ast.getName(), ast.getValue().get().getType(), true, Environment.NIL);
-                    ast.setVariable(v);
-                    return null;
-                }
-                else {
-                    throw new RuntimeException("cant read type for declaration");
-                }
-            }
-        }
-        Environment.Variable v = scope.defineVariable(ast.getName(), ast.getName(), Environment.getType(ast.getTypeName().get()), true, Environment.NIL);
-        ast.setVariable(v);
+        });
+
+        // Define and set the variable in the current scope
+        Environment.Variable variable = scope.defineVariable(
+                ast.getName(), ast.getName(), variableType, true, Environment.NIL
+        );
+
+        // Set the variable on the AST node for later use
+        ast.setVariable(variable);
+
         return null;
     }
+
 
     @Override
     public Void visit(Ast.Statement.Assignment ast) {
