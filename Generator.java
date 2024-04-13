@@ -75,12 +75,27 @@ public final class Generator implements Ast.Visitor<Void> {
 
     @Override
     public Void visit(Ast.Statement.While ast) {
-        throw new UnsupportedOperationException(); //TODO
+        print("while (");
+        visit(ast.getCondition());
+        print(") {");
+        if (ast.getStatements().isEmpty()) {
+            print("}");
+        }
+        else {
+            for (int i = 0; i < ast.getStatements().size(); i++) {
+                print("\n\t");
+                visit(ast.getStatements().get(i));
+            }
+            print("\n}");
+        }
+        return null;
     }
 
     @Override
     public Void visit(Ast.Statement.Return ast) {
-        throw new UnsupportedOperationException(); //TODO
+        print("return");
+        visit(ast.getValue());
+        return null;
     }
 
     @Override
@@ -125,14 +140,23 @@ public final class Generator implements Ast.Visitor<Void> {
 
     @Override
     public Void visit(Ast.Expression.Function ast) {
-        throw new UnsupportedOperationException(); //TODO
+        print(ast.getFunction().getJvmName());
+        print("(");
+        for (int i = 0; i < ast.getArguments().size(); i++) {
+            visit(ast.getArguments().get(i));
+            if (i != ast.getArguments().size() - 1) {
+                print(", ");
+            }
+        }
+        print(")");
+        return null;
     }
 
     @Override
     public Void visit(Ast.Expression.PlcList ast) {
         print("{");
         for (int i = 0; i < ast.getValues().size(); i++) {
-            print(ast.getValues().get(i));
+            visit(ast.getValues().get(i));
             if (i != ast.getValues().size() - 1) {
                 print(", ");
             }
