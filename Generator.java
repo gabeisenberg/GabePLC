@@ -1,7 +1,9 @@
 package plc.project;
 
 import java.io.PrintWriter;
-
+import java.io.PrintWriter;
+import java.math.BigInteger;
+import java.math.BigDecimal;
 public final class Generator implements Ast.Visitor<Void> {
 
     private final PrintWriter writer;
@@ -30,47 +32,199 @@ public final class Generator implements Ast.Visitor<Void> {
 
     @Override
     public Void visit(Ast.Source ast) {
-        throw new UnsupportedOperationException(); //TODO
+        print("public class Main {\n");
+        for (Ast.Global global : ast.getGlobals()) {
+            visit(global);
+        }
+        newline(0);
+        if (!ast.getGlobals().isEmpty()) {
+            newline(0);
+        }
+        print("\tpublic static void main(String[] args) {\n");
+        print("\t\tSystem.exit(new Main().main());\n");
+        print("\t}");
+        newline(0);
+        for (Ast.Function function : ast.getFunctions()) {
+
+            visit(function);
+        }
+
+        print("}");
+        return null;
     }
+
 
     @Override
     public Void visit(Ast.Global ast) {
-        throw new UnsupportedOperationException(); //TODO
+        String type = Environment.getType(ast.getTypeName()).getJvmName();
+        if (!ast.getMutable()) {
+            print("final ");
+        }
+        if (ast.getTypeName().equals("Decimal")) {
+            print(type + "[]");
+        } else {
+            print(type);
+        }
+        print(" " + ast.getName());
+
+        ast.getValue().ifPresent(value -> {
+            print(" = ");
+            if (value instanceof Ast.Expression.PlcList) {
+                print("{");
+                Ast.Expression.PlcList list = (Ast.Expression.PlcList) value;
+                for (int i = 0; i < list.getValues().size(); i++) {
+                    visit(list.getValues().get(i));
+                    if (i < list.getValues().size() - 1) {
+                        print(", ");
+                    }
+                }
+                print("}");
+            } else {
+                visit(value);
+            }
+        });
+        print(";");
+        return null;
     }
+
 
     @Override
     public Void visit(Ast.Function ast) {
-        throw new UnsupportedOperationException(); //TODO
+        String returnType = ast.getReturnTypeName().map(Environment::getType).map(Environment.Type::getJvmName).orElse("void");
+        print(returnType + " " + ast.getName() + "(");
+        for (int i = 0; i < ast.getParameters().size(); i++) {
+            if (i > 0) {
+                print(", ");
+            }
+            print(Environment.getType(ast.getParameterTypeNames().get(i)).getJvmName() + " " + ast.getParameters().get(i));
+        }
+        print(") {");
+        if (ast.getStatements().isEmpty()) {
+            print(" }");
+        } else {
+            newline(indent + 1);
+            for (Ast.Statement statement : ast.getStatements()) {
+                visit(statement);
+                newline(indent + 1);
+            }
+            newline(indent);
+            print("}");
+        }
+        newline(0);
+        return null;
     }
 
     @Override
     public Void visit(Ast.Statement.Expression ast) {
-        throw new UnsupportedOperationException(); //TODO
+        visit(ast.getExpression());
+        print(";");
+        return null;
     }
+
 
     @Override
     public Void visit(Ast.Statement.Declaration ast) {
-        throw new UnsupportedOperationException(); //TODO
+        String type = ast.getTypeName()
+                .map(Environment::getType) // Convert the optional type name to Environment.Type if present
+                .map(Environment.Type::getJvmName) // Convert Environment.Type to its JVM name
+                .orElseGet(() -> { // If type name is not provided, infer from the expression if possible
+                    return ast.getValue()
+                            .map(value -> {
+                                if (value instanceof Ast.Expression.Literal) {
+                                    Object literal = ((Ast.Expression.Literal) value).getLiteral();
+                                    if (literal instanceof BigInteger) {
+                                        return "int"; // Adjust based on your environment settings and needs
+                                    } else if (literal instanceof BigDecimal) {
+                                        return "double"; // Adjust based on your environment settings and needs
+                                    } else if (literal instanceof String) {
+                                        return "String";
+                                    } else {
+                                        return "Object"; // Default case, can be adjusted as needed
+                                    }
+                                }
+                                return "Object"; // Default if not a literal or other cases
+                            })
+                            .orElse("Object"); // Default if no value is present
+                });
+
+        print(type + " " + ast.getName());
+        ast.getValue().ifPresent(value -> {
+            print(" = ");
+            visit(value);
+        });
+        print(";");
+        return null;
     }
+
 
     @Override
     public Void visit(Ast.Statement.Assignment ast) {
-        throw new UnsupportedOperationException(); //TODO
+        visit(ast.getReceiver());
+        print(" = ");
+        visit(ast.getValue());
+        print(";");
+        return null;
     }
 
     @Override
     public Void visit(Ast.Statement.If ast) {
-        throw new UnsupportedOperationException(); //TODO
+        print("if (");
+        visit(ast.getCondition());
+        print(") {");
+        indent++;  // Increase indentation
+        for (int i = 0; i < ast.getThenStatements().size(); i++) {
+            newline(indent);  // Only add a newline before each statement
+            visit(ast.getThenStatements().get(i));
+        }
+        indent--;  // Decrease indentation
+        newline(indent);
+        print("}");
+        if (!ast.getElseStatements().isEmpty()) {
+            print(" else {");
+            indent++;  // Increase indentation
+            for (int i = 0; i < ast.getElseStatements().size(); i++) {
+                newline(indent);
+                visit(ast.getElseStatements().get(i));
+            }
+            indent--;  // Decrease indentation
+            newline(indent);
+            print("}");
+        }
+        return null;
     }
+
+
+
 
     @Override
     public Void visit(Ast.Statement.Switch ast) {
-        throw new UnsupportedOperationException(); //TODO
+        print("switch (");
+        visit(ast.getCondition());
+        print(") {\n\t");
+        for (int i = 0; i < ast.getCases().size(); i++) {
+            visit(ast.getCases().get(i));
+        }
+        return null;
     }
 
     @Override
     public Void visit(Ast.Statement.Case ast) {
-        throw new UnsupportedOperationException(); //TODO
+        print("case");
+        if (ast.getValue().isPresent()) {
+            print("'");
+            print(ast.getValue().get());
+            print("':\n\t");
+            for (int i = 0; i < ast.getStatements().size(); i++) {
+                visit(ast.getStatements().get(i));
+            }
+        }
+        else {
+            print("default:\n\t");
+            for (int i = 0; i < ast.getStatements().size(); i++) {
+                visit(ast.getStatements().get(i));
+            }
+        }
+        return null;
     }
 
     @Override
@@ -78,15 +232,15 @@ public final class Generator implements Ast.Visitor<Void> {
         print("while (");
         visit(ast.getCondition());
         print(") {");
-        if (ast.getStatements().isEmpty()) {
-            print("}");
-        }
-        else {
+        if (!ast.getStatements().isEmpty()) {
             for (int i = 0; i < ast.getStatements().size(); i++) {
                 print("\n\t");
                 visit(ast.getStatements().get(i));
             }
             print("\n}");
+        }
+        else {
+            print("}");
         }
         return null;
     }
@@ -129,14 +283,15 @@ public final class Generator implements Ast.Visitor<Void> {
 
     @Override
     public Void visit(Ast.Expression.Access ast) {
-        print(ast.getName());
-        if (ast.getOffset().get() instanceof Ast.Expression.PlcList) {
+        print(ast.getVariable().getJvmName());  // Assuming getJvmName is always available
+        ast.getOffset().ifPresent(offset -> {
             print("[");
-            print(ast.getOffset().get());
+            visit(offset);
             print("]");
-        }
+        });
         return null;
     }
+
 
     @Override
     public Void visit(Ast.Expression.Function ast) {
