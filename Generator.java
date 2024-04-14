@@ -32,23 +32,26 @@ public final class Generator implements Ast.Visitor<Void> {
 
     @Override
     public Void visit(Ast.Source ast) {
-        print("public class Main {\n");
+        print("public class Main {");
+        newline(0);
         for (Ast.Global global : ast.getGlobals()) {
             visit(global);
         }
-        newline(0);
+        newline(++indent);
         if (!ast.getGlobals().isEmpty()) {
-            newline(0);
+            newline(indent);
         }
-        print("\tpublic static void main(String[] args) {\n");
-        print("\t\tSystem.exit(new Main().main());\n");
-        print("\t}");
+        print("public static void main(String[] args) {");
+        newline(++indent);
+        print("System.exit(new Main().main());");
+        newline(--indent);
+        print("}");
         newline(0);
         for (Ast.Function function : ast.getFunctions()) {
-
+            newline(indent);
             visit(function);
         }
-
+        newline(0);
         print("}");
         return null;
     }
@@ -102,12 +105,14 @@ public final class Generator implements Ast.Visitor<Void> {
         if (ast.getStatements().isEmpty()) {
             print(" }");
         } else {
-            newline(indent + 1);
-            for (Ast.Statement statement : ast.getStatements()) {
-                visit(statement);
-                newline(indent + 1);
+            newline(++indent);
+            for (int i = 0; i < ast.getStatements().size(); i++) {
+                visit(ast.getStatements().get(i));
+                if (i != ast.getStatements().size() - 1) {
+                    newline(indent);
+                }
             }
-            newline(indent);
+            newline(--indent);
             print("}");
         }
         newline(0);
@@ -200,26 +205,32 @@ public final class Generator implements Ast.Visitor<Void> {
     public Void visit(Ast.Statement.Switch ast) {
         print("switch (");
         visit(ast.getCondition());
-        print(") {\n\t");
+        print(") {");
+        newline(++indent);
         for (int i = 0; i < ast.getCases().size(); i++) {
             visit(ast.getCases().get(i));
         }
+        --indent;
+        newline(--indent);
+        print("}");
         return null;
     }
 
     @Override
     public Void visit(Ast.Statement.Case ast) {
-        print("case");
         if (ast.getValue().isPresent()) {
-            print("'");
-            print(ast.getValue().get());
-            print("':\n\t");
+            print("case ", ast.getValue().get(), ":");
+            newline(++indent);
             for (int i = 0; i < ast.getStatements().size(); i++) {
                 visit(ast.getStatements().get(i));
+                newline(indent);
             }
+            print("break;");
+            newline(--indent);
         }
         else {
-            print("default:\n\t");
+            print("default:");
+            newline(++indent);
             for (int i = 0; i < ast.getStatements().size(); i++) {
                 visit(ast.getStatements().get(i));
             }
@@ -234,10 +245,11 @@ public final class Generator implements Ast.Visitor<Void> {
         print(") {");
         if (!ast.getStatements().isEmpty()) {
             for (int i = 0; i < ast.getStatements().size(); i++) {
-                print("\n\t");
+                newline(++indent);
                 visit(ast.getStatements().get(i));
             }
-            print("\n}");
+            newline(--indent);
+            print("}");
         }
         else {
             print("}");
@@ -247,15 +259,19 @@ public final class Generator implements Ast.Visitor<Void> {
 
     @Override
     public Void visit(Ast.Statement.Return ast) {
-        print("return");
+        print("return ");
         visit(ast.getValue());
+        print(";");
         return null;
     }
 
     @Override
     public Void visit(Ast.Expression.Literal ast) {
         if (ast.getLiteral() instanceof String) {
-            print("\"" + ast.getLiteral() + "\"");
+            print("\"", ast.getLiteral(), "\"");
+        }
+        else if (ast.getLiteral() instanceof Character) {
+            print("'", ast.getLiteral(), "'");
         }
         else {
             print(ast.getLiteral());
