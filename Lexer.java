@@ -68,6 +68,16 @@ public final class Lexer {
     public Token lexNumber() {
         // Check if number is after .
         String test = chars.input.substring(chars.index);
+        //create new string to match
+        StringBuilder tempBuilder = new StringBuilder("");
+        for (int i = 0; i < test.length(); i++) {
+            Character c = test.charAt(i);
+            if ((c + "").matches("[\b\n\n\t ]")) {
+                break;
+            }
+            tempBuilder.append(c);
+        }
+        test = tempBuilder.toString();
         if (test.contains(".")) {
             int num = test.indexOf(".") + 1;
             int num2 = test.length();
@@ -81,6 +91,11 @@ public final class Lexer {
         // Check for negative sign
         boolean negative = false;
         if (peek("-")) {
+            if (test.length() == 1) {
+                //hyphen case
+                match("-");
+                return chars.emit(Token.Type.OPERATOR);
+            }
             match("-");
             negative = true;
         }
@@ -147,11 +162,16 @@ public final class Lexer {
         while(peek("[^\"]")) {
             if (peek("[^\\\\]")) {
                 //if does not start with escape sequence
+                if (peek("[\n\r\t\b]")) {
+                    //physical whitespace errors
+                    throw new ParseException("Wrong escape sequence for string!", chars.index);
+                }
                 match("[^\\\\]");
             }
             else {
                 //starts with escape sequence
                 match("[\\\\]");
+                //check for invalid escape
                 //check if next character is valid escape
                 if (peek("[bnrt\"\'\\\\]")) {
                     match("[bnrt\"\'\\\\]");
