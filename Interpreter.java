@@ -26,7 +26,24 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
 
     @Override
     public Environment.PlcObject visit(Ast.Source ast) {
+        //visit globals
         for (Ast.Global global : ast.getGlobals()) {
+            visit(global);
+        }
+        //visit functions
+        List<Ast.Function> funcs = ast.getFunctions();
+        for (Ast.Function f : funcs) {
+            visit(f);
+        }
+        //invoke main
+        try {
+            List<Environment.PlcObject> list = new ArrayList<>();
+            return scope.lookupFunction("main", 0).invoke(list);
+        }
+        catch (Exception e) {
+            throw new RuntimeException("No main found!");
+        }
+        /*for (Ast.Global global : ast.getGlobals()) {
             visit(global);
         }
         //find main function
@@ -43,7 +60,7 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
         Boolean inParent = false;
         if (mainFunc == null) {
             try {
-                this.scope.getParent().lookupFunction("main", 0);
+                this.scope.lookupFunction("main", 0);
                 inParent = true;
             }
             catch (Exception e) {
@@ -53,7 +70,7 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
         //invoke main
         if (inParent) {
             List<Environment.PlcObject> list = new ArrayList<>();
-            Environment.Function tempMain = this.scope.getParent().lookupFunction("main", 0);
+            Environment.Function tempMain = this.scope.lookupFunction("main", 0);
             Environment.PlcObject temp2 = tempMain.invoke(list);
             return temp2;
         }
@@ -61,7 +78,7 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
         List<Environment.PlcObject> list = new ArrayList<>();
         Environment.Function temp = scope.lookupFunction("main", 0);
         Environment.PlcObject temp1 = temp.invoke(list);
-        return temp1;
+        return temp1;*/
     }
 
     @Override
@@ -126,6 +143,9 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
             //Object temp = this.scope.lookupVariable("list").getValue(); //gets temp
             // Lookup the variable in the scope using the extracted name
             Environment.Variable variable = scope.lookupVariable(variableName);
+            if (!variable.getMutable()) {
+                throw new RuntimeException("Mutable, Cannot change!");
+            }
             try { //check if list
                 //get index to change
                 Ast.Expression val = access.getOffset().get();
@@ -160,10 +180,14 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
 
     @Override
     public Environment.PlcObject visit(Ast.Statement.If ast) {
-        Ast.Expression.Literal temp = (Ast.Expression.Literal)ast.getCondition();
-        if (temp.getLiteral() instanceof Boolean) {
+        Environment.PlcObject t = visit(ast.getCondition());
+        if (!(t.getValue() instanceof Boolean)) {
+            throw new RuntimeException("Cannot get conditon from literal!");
+        }
+        //Ast.Expression.Literal temp = (Ast.Expression.Literal)ast.getCondition();
+        if (t.getValue() instanceof Boolean) {
             //evaluate
-            Boolean cond = (Boolean)temp.getLiteral();
+            Boolean cond = (Boolean)t.getValue();
             List<Ast.Statement> valList = null;
             if (cond) {
                 valList = ast.getThenStatements();
@@ -185,23 +209,26 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
     @Override
     public Environment.PlcObject visit(Ast.Statement.Switch ast) {
         //get condition
-        Ast.Expression cond = ast.getCondition();
+        /*Ast.Expression cond = ast.getCondition();
         String condName = ((Ast.Expression.Access)cond).getName();
-        Object condValue = scope.lookupVariable(condName).getValue().getValue();
+        Object condValue = scope.lookupVariable(condName).getValue().getValue();*/
+        Object condValue = visit(ast.getCondition()).getValue();
         //get list of cases
         List<Ast.Statement.Case> cases = ast.getCases();
         for (int i = 0; i < cases.size(); i++) {
             Ast.Statement.Case c = cases.get(i);
             //check if condition equals case value
-            Object value = ((Ast.Expression.Literal)c.getValue().get()).getLiteral();
+            //Object value = ((Ast.Expression.Literal)c.getValue().get()).getLiteral();
+            if (i == cases.size() - 1) {
+                //default
+                visit(c);
+                break;
+            }
+            Object value = visit(c.getValue().get()).getValue();
             if (condValue.equals(value)) {
                 //evaluate case expressions
                 visit(c);
                 break;
-            }
-            if (i == cases.size() - 1) {
-                //default
-                visit(c);
             }
         }
         return Environment.NIL;
@@ -291,9 +318,15 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
                     if (right.getValue() instanceof Boolean && (Boolean)right.getValue() == true) {
                         return Environment.create(true);
                     }
+                    else if (!(right.getValue() instanceof Boolean) && right != null) {
+                        throw new RuntimeException("wrong binary type for &&!");
+                    }
                     else {
                         return Environment.create(false);
                     }
+                }
+                else if (!(left.getValue() instanceof Boolean)) {
+                    throw new RuntimeException("wrong binary type for &&!");
                 }
                 else {
                     return Environment.create(false);
@@ -302,19 +335,33 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
                 if (left.getValue() instanceof Boolean && (Boolean)left.getValue() == true) {
                     return Environment.create(true);
                 }
+                else if (!(left.getValue() instanceof Boolean)) {
+                    throw new RuntimeException("wrong binary type for ||!");
+                }
                 else {
+                    if (right == null) {
+                        return Environment.create(!((Boolean)left.getValue()));
+                    }
+                    else if (!(right.getValue() instanceof Boolean)) {
+                        throw new RuntimeException("wrong binary type for ||!");
+                    }
                     if (right.getValue() instanceof Boolean && (Boolean)right.getValue() == true) {
-                        return Environment.create(false);
+                        return Environment.create(true);
                     }
                     else {
-                        return Environment.create(true);
+                        return Environment.create(false);
                     }
                 }
             case "<":
                 //check if types are int or decimal?
                 if (left.getValue() instanceof Comparable) {
                     Comparable lhsInt = (Comparable) left.getValue();
-                    Comparable rhsInt = requireType(Comparable.class, right);
+                    if (!(right.getValue() instanceof Comparable)) {
+                        throw new RuntimeException("Not comparable!");
+                    }
+                    Comparable rhsInt = (Comparable) right.getValue();
+                    //Comparable rhsInt = requireType(Comparable.class, right);
+                    requireType(left.getValue().getClass(), right); //check
                     int res = lhsInt.compareTo(rhsInt);
                     if (res < 0) {
                         return Environment.create(true);
@@ -330,7 +377,12 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
                 //check if types are int or decimal?
                 if (left.getValue() instanceof Comparable) {
                     Comparable lhsInt = (Comparable) left.getValue();
-                    Comparable rhsInt = requireType(Comparable.class, right);
+                    if (!(right.getValue() instanceof Comparable)) {
+                        throw new RuntimeException("Not comparable!");
+                    }
+                    Comparable rhsInt = (Comparable) right.getValue();
+                    //Comparable rhsInt = requireType(Comparable.class, right);
+                    requireType(left.getValue().getClass(), right); //check
                     int res = lhsInt.compareTo(rhsInt);
                     if (res > 0) {
                         return Environment.create(true);
@@ -372,9 +424,15 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
             case "/":
                 // Handle division for BigInteger and BigDecimal
                 if (left.getValue() instanceof BigInteger && right.getValue() instanceof BigInteger) { //running under the assumption integers/integers = integers
+                    if (((BigInteger)right.getValue()).equals(0)) {
+                        throw new RuntimeException("Cannot divide by zero!");
+                    }
                     return Environment.create(((BigInteger) left.getValue()).divide((BigInteger) right.getValue()));
                 }
                 else if (left.getValue() instanceof BigDecimal && right.getValue() instanceof BigDecimal) {
+                    if (((BigDecimal)right.getValue()).equals(0)) {
+                        throw new RuntimeException("Cannot divide by zero!");
+                    }
                     return Environment.create(((BigDecimal) left.getValue()).divide((BigDecimal) right.getValue(), RoundingMode.HALF_EVEN));
                 }
                 else {
@@ -399,7 +457,7 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
                 }
             case "+":
                 // Check for string concatenation first
-                if (left.getValue() instanceof String && right.getValue() instanceof String) { // if either left or right is a string, concatenate
+                if (left.getValue() instanceof String || right.getValue() instanceof String) { // if either left or right is a string, concatenate
                     return Environment.create(left.getValue().toString() + right.getValue().toString());
                 }
                 else if (left.getValue() instanceof BigInteger && right.getValue() instanceof BigInteger) { //both are BigInteger
@@ -499,8 +557,9 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
         List<Ast.Expression> vals = ast.getValues();
         List<Object> resVals = new ArrayList<>();
         for (Ast.Expression item : vals) {
-            Ast.Expression.Literal newItem = (Ast.Expression.Literal)item;
-            resVals.add(visit(newItem).getValue());
+            /*Ast.Expression.Literal newItem = (Ast.Expression.Literal)item;
+            resVals.add(visit(newItem).getValue());*/
+            resVals.add(visit(item).getValue());
         }
         return Environment.create(resVals);
     }
