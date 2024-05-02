@@ -40,8 +40,11 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
             List<Environment.PlcObject> list = new ArrayList<>();
             return scope.lookupFunction("main", 0).invoke(list);
         }
+        /*catch (Return r) {
+            return r.value;
+        }*/
         catch (Exception e) {
-            throw new RuntimeException("No main found!");
+            throw new RuntimeException(e.getMessage());
         }
         /*for (Ast.Global global : ast.getGlobals()) {
             visit(global);
@@ -188,6 +191,8 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
         if (t.getValue() instanceof Boolean) {
             //evaluate
             Boolean cond = (Boolean)t.getValue();
+            Scope prev = scope;
+            scope = new Scope(prev);
             List<Ast.Statement> valList = null;
             if (cond) {
                 valList = ast.getThenStatements();
@@ -198,6 +203,7 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
             for (Ast.Statement i : valList) {
                 visit(i);
             }
+            scope = prev;
         }
         else {
             //error, do not proceed
@@ -262,10 +268,13 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
             }
 
             // Execute statements
+            Scope prev = scope;
+            scope = new Scope(prev);
             List<Ast.Statement> sts = ast.getStatements();
             for (Ast.Statement s : sts) {
                 visit(s);
             }
+            scope = prev;
         }
 
         return Environment.NIL;
