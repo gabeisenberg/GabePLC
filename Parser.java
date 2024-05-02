@@ -56,14 +56,26 @@ public final class Parser {
      * next tokens start a global, aka {@code LIST|VAL|VAR}.
      */
     public Ast.Global parseGlobal() throws ParseException {
-        if (peek("VAL")) {
-            return parseImmutable();
-        } else if (peek("VAR")) {
-            return parseMutable();
-        } else {
-            throw new ParseException("Expected 'VAL' or 'VAR'", tokens.get(0).getIndex());
+        boolean mutable = match("VAR");
+        if (!mutable) {
+            match("VAL");
         }
+        String name = tokens.get(0).getLiteral();
+        match(Token.Type.IDENTIFIER);
+        String type = "Any"; // Default type
+        if (match(":")) {
+            type = tokens.get(0).getLiteral();
+            match(Token.Type.IDENTIFIER);
+        }
+        Optional<Ast.Expression> value = Optional.empty();
+        if (match("=")) {
+            value = Optional.of(parseExpression());
+        }
+        match(";");
+        return new Ast.Global(name, type, mutable, value);
     }
+
+
 
 
     /**
@@ -71,8 +83,21 @@ public final class Parser {
      * next token declares a list, aka {@code LIST}.
      */
     public Ast.Global parseList() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        match("LIST"); // Match the LIST keyword.
+        String name = tokens.get(0).getLiteral(); // Get the list name.
+        match(Token.Type.IDENTIFIER); // Ensure it's an identifier.
+        match("="); // Match the equals sign.
+        match("["); // Start of the list.
+        List<Ast.Expression> values = new ArrayList<>();
+        if (!peek("]")) { // Check if the list is not empty.
+            do {
+                values.add(parseExpression()); // Parse each expression in the list.
+            } while (match(",")); // Continue if there's a comma.
+        }
+        match("]"); // End of the list.
+        return new Ast.Global(name, true, Optional.of(new Ast.Expression.PlcList(values))); // Since it's a list, mutable is assumed true.
     }
+
 
     /**
      * Parses the {@code mutable} rule. This method should only be called if the
@@ -108,13 +133,21 @@ public final class Parser {
         String name = tokens.get(0).getLiteral();
         match(Token.Type.IDENTIFIER);
         match("(");
-        // Assuming no parameters for simplicity; adjust as needed
+        List<String> parameters = new ArrayList<>(); // Assuming parameters are parsed elsewhere
+        List<String> parameterTypes = new ArrayList<>(); // Assuming parameter types are parsed elsewhere
         match(")");
+        Optional<String> returnType = Optional.of("Any"); // Default return type
+        if (match(":")) {
+            returnType = Optional.of(tokens.get(0).getLiteral());
+            match(Token.Type.IDENTIFIER);
+        }
         match("DO");
         List<Ast.Statement> statements = parseBlock();
         match("END");
-        return new Ast.Function(name, Collections.emptyList(), statements); // Adjust for parameters
+        return new Ast.Function(name, parameters, parameterTypes, returnType, statements);
     }
+
+
 
 
     /**
@@ -130,43 +163,96 @@ public final class Parser {
     }
 
 
-    /**
-     * Parses the {@code statement} rule and delegates to the necessary method.
-     * If the next tokens do not start a declaration, if, while, or return
-     * statement, then it is an expression/assignment statement.
-     */
     public Ast.Statement parseStatement() throws ParseException {
-        Ast.Statement res = null;
-        //check for assignment
-        //check for first expression
-        String lhs = tokens.get(0).getLiteral();
-        Ast.Expression exp1 = parseExpression();
-        //check for =
-        if (peek("=")) {
-            match("=");
-            //get next name of rhs var
-            String rhs = tokens.get(0).getLiteral();
-            Ast.Expression exp2 = parseExpression();
-            res = new Ast.Statement.Assignment(
-                    new Ast.Expression.Access(Optional.empty(), lhs),
-                    new Ast.Expression.Access(Optional.empty(), rhs)
-            );
+        if (match("IF")) {
+            return parseIfStatement();
+        } else if (match("WHILE")) {
+            return parseWhileStatement();
+        } else if (match("RETURN")) {
+            return parseReturnStatement();
+        } else if (match("LET")) {
+            return parseDeclarationStatement();
         }
-        else {
-            //not assignment
-            res = new Ast.Statement.Expression(exp1);
+
+        if (!peek(Token.Type.IDENTIFIER)) {
+            throw new ParseException("Expected identifier at the beginning of the statement", tokens.get(0).getIndex());
         }
-        //MUST match ;
-        if (peek(";")) {
-            match(";");
+
+        String identifier = tokens.get(0).getLiteral();
+        match(Token.Type.IDENTIFIER);
+
+        if (match("=")) {
+            // It's an assignment statement
+            Ast.Expression value = parseExpression();
+            if (!match(";")) {
+                throw new ParseException("Missing ;", tokens.get(0).getIndex());
+            }
+            return new Ast.Statement.Assignment(new Ast.Expression.Access(Optional.empty(), identifier), value);
+        } else if (match("(")) {
+            // It's a function call
+            List<Ast.Expression> arguments = new ArrayList<>();
+            if (!peek(")")) {
+                do {
+                    arguments.add(parseExpression());
+                } while (match(","));
+            }
+            match(")");
+            match(";"); // Function calls must end with a semicolon
+            return new Ast.Statement.Expression(new Ast.Expression.Function(identifier, arguments));
         }
-        else {
-            int size = tokens.get(-1).getIndex() + tokens.get(-1).getLiteral().length();
-            throw new ParseException("Missing ;", size);
-            //throw new ParseException("Missing ;", tokens.index);
+        else if (match("[")) {
+            //match("[");
+            //list, get next expression
+            Ast.Expression nextExp = parseExpression();
+            if (peek("]")) {
+                match("]");
+            }
+            else {
+                int size = tokens.get(-1).getIndex() + tokens.get(-1).getLiteral().length();
+                throw new ParseException("Missing ]", size);
+            }
+            if (match("=")) {
+                Ast.Expression value = parseExpression();
+                if (!match(";")) {
+                    int size = tokens.get(-1).getIndex() + tokens.get(-1).getLiteral().length();
+                    throw new ParseException("Missing ;", size);
+                }
+                return new Ast.Statement.Assignment(new Ast.Expression.Access(Optional.of(nextExp), identifier), value);
+            }
+            //return new Ast.Statement.Declaration(identifier, Optional.of(Ast.Expression.Access(Optional.of(nextExp)));
+            /*Ast.Expression offset = parseExpression();
+            if (match("=")) {
+                Ast.Expression value = parseExpression();
+                return new Ast.Statement.Assignment(new Ast.Expression.Access(Optional.of(offset), identifier), value);
+            }*/
+            /*match("[");
+            //list, get next expression
+            Ast.Expression nextExp = parseExpression();
+            if (peek("]")) {
+                match("]");
+            }
+            else {
+                int size = tokens.get(-1).getIndex() + tokens.get(-1).getLiteral().length();
+                throw new ParseException("Missing ]", size);
+                //throw new ParseException("Missing ]", tokens.get(0).getIndex() + tokens.get(0).getLiteral().length());
+            }
+            if (match("=")) {
+                Ast.Expression value = parseExpression();
+                return new Ast.Statement.Assignment(new Ast.Expression.Access(Optional.of(nextExp), identifier), value);
+            }
+            else {
+                //declaration
+                return new Ast.Statement.Declaration(identifier, Optional.of(nextExp));
+            }*/
         }
-        return res;
+        // It's a simple expression statement or an error
+        if (!match(";")) {
+            throw new ParseException("Missing ;", 1);
+        }
+        match(";"); // Assuming it was just a variable access
+        return new Ast.Statement.Expression(new Ast.Expression.Access(Optional.empty(), identifier));
     }
+
 
     /**
      * Parses a declaration statement from the {@code statement} rule. This
@@ -182,12 +268,19 @@ public final class Parser {
             throw new ParseException("Expected identifier but was not provided", -1);
         }
         String name = tokens.get(-1).getLiteral();
-        //do not need to test for reserved keywords yet
         Optional<Ast.Expression> value = Optional.empty();
+        Optional<String> typeName = Optional.empty();  // Initialize type name as empty
+        if (match(":")) {  // Check if there is a type specifier
+            if (!match(Token.Type.IDENTIFIER)){
+                //throw a parse exception if type identifier is missing after ':'
+                throw new ParseException("Expected type identifier but was not provided", -1);
+            }
+            typeName = Optional.of(tokens.get(-1).getLiteral());  // Capture the type name
+        }
         if (match("=")){
             value = Optional.of(parseExpression());
         }
-        return new Ast.Statement.Declaration(name, value);
+        return new Ast.Statement.Declaration(name, typeName,value);
     }
 
     /**
@@ -196,7 +289,24 @@ public final class Parser {
      * {@code IF}.
      */
     public Ast.Statement.If parseIfStatement() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        Ast.Expression condition = parseExpression();
+        if (!match("DO")) {
+            throw new ParseException("Expected 'DO'", tokens.get(-1).getIndex());
+        }
+        List<Ast.Statement> thenStatements = new ArrayList<>();
+        while (!peek("ELSE") && !peek("END")) {
+            thenStatements.add(parseStatement());
+        }
+        List<Ast.Statement> elseStatements = new ArrayList<>();
+        if (match("ELSE")) {
+            while (!peek("END")) {
+                elseStatements.add(parseStatement());
+            }
+        }
+        if (!match("END")) {
+            throw new ParseException("Expected 'END'", tokens.get(-1).getIndex());
+        }
+        return new Ast.Statement.If(condition, thenStatements, elseStatements);
     }
 
     /**
@@ -205,8 +315,34 @@ public final class Parser {
      * {@code SWITCH}.
      */
     public Ast.Statement.Switch parseSwitchStatement() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        if (!match("SWITCH")) {
+            throw new ParseException("Expected 'SWITCH'", tokens.get(0).getIndex());
+        }
+
+        List<Ast.Statement.Case> cases = new ArrayList<>();
+        Ast.Expression condition = parseExpression();
+
+        while (match("CASE")) { Ast.Expression caseExpression = parseExpression();
+            if (!match(":")) {
+                throw new ParseException("Expected ':'", tokens.get(0).getIndex());
+            }
+            List<Ast.Statement> caseStatements = parseBlock();
+            cases.add(new Ast.Statement.Case(Optional.of(caseExpression), caseStatements));
+        }
+        if (!match("DEFAULT")) {
+            throw new ParseException("Missing 'DEFAULT", tokens.get(0).getIndex());
+        }
+        if (!match(":")) {
+            throw new ParseException("Expected ':'", tokens.get(0).getIndex());
+        }
+        List<Ast.Statement> defaultStatements = parseBlock();
+        cases.add(new Ast.Statement.Case(Optional.empty(), defaultStatements));
+        if (!match("END")) {
+            throw new ParseException("Expected 'END'", tokens.get(0).getIndex());
+        }
+        return new Ast.Statement.Switch(condition, cases);
     }
+
 
     /**
      * Parses a case or default statement block from the {@code switch} rule.
@@ -214,26 +350,43 @@ public final class Parser {
      * default block of a switch statement, aka {@code CASE} or {@code DEFAULT}.
      */
     public Ast.Statement.Case parseCaseStatement() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        if (!match("CASE")) {throw new ParseException("Expected CASE", tokens.get(0).getIndex());}
+        if (!match(":")) {throw new ParseException("Expected semicolon", tokens.get(0).getIndex());}
+        Ast.Expression cExpression = parseExpression();
+        List<Ast.Statement> cStatements = parseBlock();
+        return new Ast.Statement.Case(Optional.of(cExpression), cStatements);
     }
 
-    /**
-     * Parses a while statement from the {@code statement} rule. This method
-     * should only be called if the next tokens start a while statement, aka
-     * {@code WHILE}.
-     */
     public Ast.Statement.While parseWhileStatement() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        match("WHILE");
+        Ast.Expression condition = parseExpression();
+
+        match("DO");
+        List<Ast.Statement> statements = parseBlock();
+
+        match("END");
+        return new Ast.Statement.While(condition, statements);
     }
+
+    public Ast.Statement.Return parseReturnStatement() throws ParseException {
+        match("RETURN"); // Match the RETURN keyword.
+        Ast.Expression value = parseExpression(); // Parse the return expression.
+        match(";"); // Match the semicolon to end the return statement.
+        return new Ast.Statement.Return(value);
+    }
+
+// You'll need to integrate these methods into your parsing logic where appropriate,
+// likely within the parseStatement() method where you determine the type of statement
+// based on the current token and delegate to the specific parse method.
+
 
     /**
      * Parses a return statement from the {@code statement} rule. This method
      * should only be called if the next tokens start a return statement, aka
      * {@code RETURN}.
      */
-    public Ast.Statement.Return parseReturnStatement() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
-    }
+
+
 
     /**
      * Parses the {@code expression} rule.
@@ -384,6 +537,18 @@ public final class Parser {
                     String nextName = tokens.get(0).getLiteral();
                     Ast.Expression nextExp = parseExpression();
                     if (peek("]")) {
+                        match("]");
+                    }
+                    else {
+                        int size = tokens.get(-1).getIndex() + tokens.get(-1).getLiteral().length();
+                        throw new ParseException("Missing ]", size);
+                    }
+                    return new Ast.Expression.Access(Optional.of(nextExp), temp);
+                    /*match("[");
+                    //list, get next expression
+                    String nextName = tokens.get(0).getLiteral();
+                    Ast.Expression nextExp = parseExpression();
+                    if (peek("]")) {
                         match("[");
                     }
                     else {
@@ -391,7 +556,7 @@ public final class Parser {
                         throw new ParseException("Missing ]", size);
                         //throw new ParseException("Missing ]", tokens.get(0).getIndex() + tokens.get(0).getLiteral().length());
                     }
-                    return new Ast.Expression.Access(Optional.of(new Ast.Expression.Access(Optional.empty(), nextName)), temp);
+                    return new Ast.Expression.Access(Optional.of(nextExp), nextName);*/
                 }
                 else {
                     //normal identifier
