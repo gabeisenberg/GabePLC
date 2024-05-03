@@ -71,7 +71,9 @@ public final class Parser {
         if (match("=")) {
             value = Optional.of(parseExpression());
         }
-        match(";");
+        if (!match(";")) {
+            throw new ParseException("Missing :", tokens.get(-1).getIndex() + tokens.get(-1).getLiteral().length());
+        }
         return new Ast.Global(name, type, mutable, value);
     }
 
@@ -172,7 +174,8 @@ public final class Parser {
             return parseReturnStatement();
         } else if (match("LET")) {
             return parseDeclarationStatement();
-        }
+        } else if (peek("SWITCH"))
+            return parseSwitchStatement();
 
         if (!peek(Token.Type.IDENTIFIER)) {
             throw new ParseException("Expected identifier at the beginning of the statement", tokens.get(0).getIndex());
@@ -185,7 +188,7 @@ public final class Parser {
             // It's an assignment statement
             Ast.Expression value = parseExpression();
             if (!match(";")) {
-                throw new ParseException("Missing ;", tokens.get(0).getIndex());
+                throw new ParseException("Missing ;", tokens.get(-1).getIndex() + tokens.get(-1).getLiteral().length());
             }
             return new Ast.Statement.Assignment(new Ast.Expression.Access(Optional.empty(), identifier), value);
         } else if (match("(")) {
@@ -364,7 +367,9 @@ public final class Parser {
         match("DO");
         List<Ast.Statement> statements = parseBlock();
 
-        match("END");
+        if (!match("END")) {
+            throw new ParseException("No END", tokens.get(0).getIndex());
+        }
         return new Ast.Statement.While(condition, statements);
     }
 
