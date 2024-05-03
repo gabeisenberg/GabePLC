@@ -143,7 +143,10 @@ public final class Parser {
             returnType = Optional.of(tokens.get(0).getLiteral());
             match(Token.Type.IDENTIFIER);
         }
-        match("DO");
+        if (!match("DO")) {
+            int size = tokens.get(-1).getIndex() + tokens.get(-1).getLiteral().length();
+            throw new ParseException("Missing Operand", size);
+        }
         List<Ast.Statement> statements = parseBlock();
         match("END");
         return new Ast.Function(name, parameters, parameterTypes, returnType, statements);
@@ -294,7 +297,8 @@ public final class Parser {
     public Ast.Statement.If parseIfStatement() throws ParseException {
         Ast.Expression condition = parseExpression();
         if (!match("DO")) {
-            throw new ParseException("Expected 'DO'", tokens.get(-1).getIndex());
+            int size = tokens.get(-1).getIndex() + tokens.get(-1).getLiteral().length();
+            throw new ParseException("Missing DO", size);
         }
         List<Ast.Statement> thenStatements = new ArrayList<>();
         while (!peek("ELSE") && !peek("END")) {
@@ -364,7 +368,10 @@ public final class Parser {
         match("WHILE");
         Ast.Expression condition = parseExpression();
 
-        match("DO");
+        if (!match("DO")) {
+            int size = tokens.get(-1).getIndex() + tokens.get(-1).getLiteral().length();
+            throw new ParseException("Missing DO", size);
+        }
         List<Ast.Statement> statements = parseBlock();
 
         if (!match("END")) {
